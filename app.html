@@ -1,0 +1,39 @@
+<!doctype html>
+<!--
+  Onglet hote de l'extension, ouvert depuis le popup.
+  Il contient deux choses:
+   - l'iframe du Genesys Cloud Embeddable Framework (le "vrai" softphone)
+   - le bouton qui ouvre la fenetre Picture-in-Picture
+  Toute la logique est dans src/app.js.
+-->
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Genesys Cloud PiP Companion</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="app-page" data-integration-adapter="embeddable-framework">
+  <main class="layout">
+    <section class="panel app-panel">
+      <div>
+        <h1 data-i18n="app.title">Genesys Cloud PiP Companion</h1>
+        <p data-i18n="app.intro">Ouvre Genesys Cloud Embeddable Framework et synchronise le statut agent vers la fenetre Picture-in-Picture.</p>
+      </div>
+      <button id="openPip" class="button button-primary" data-i18n="app.openPip">Ouvrir Picture-in-Picture</button>
+      <p id="pipSupport" class="hint"></p>
+    </section>
+
+    <section class="softphone-shell">
+      <iframe
+        id="softphone"
+        title="Genesys Cloud Embeddable Framework"
+        allow="camera *; microphone *; autoplay *; hid *"
+        src="https://apps.mypurecloud.ie/crm/embeddableFramework.html?dedicatedLoginWindow=true&enableFrameworkClientId=true">
+      </iframe>
+    </section>
+  </main>
+
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>

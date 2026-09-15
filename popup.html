@@ -1,0 +1,130 @@
+<!doctype html>
+<!--
+  Petite fenetre affichee au clic sur l'icone de l'extension.
+  Elle ouvre app.html et enregistre les preferences (langue, theme, filtre).
+  Les textes portent data-i18n et sont remplis par popup.js.
+-->
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Genesys PiP</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="popup-page">
+  <h1 data-i18n="popup.title">Genesys PiP</h1>
+
+  <button id="openApp" class="button button-primary full-width" data-i18n="popup.openApp">Ouvrir le client Genesys</button>
+  <p class="hint" data-i18n="popup.hint">La fenetre PiP doit etre ouverte depuis un clic utilisateur.</p>
+
+  <div class="popup-config">
+    <section class="settings-section">
+      <div class="settings-section-title" data-i18n="popup.settings.general">General</div>
+
+      <label class="popup-label" for="languageSelect" data-i18n="popup.language">Langue</label>
+      <select id="languageSelect" class="popup-select">
+        <option value="system" data-i18n="popup.languageSystem">Langue du navigateur</option>
+        <option value="fr">Francais</option>
+        <option value="en">English</option>
+      </select>
+
+      <label class="popup-label" for="themeSelect" data-i18n="popup.theme">Theme PiP</label>
+      <select id="themeSelect" class="popup-select">
+        <option value="light" data-i18n="popup.themeLight">Clair</option>
+        <option value="dark" data-i18n="popup.themeDark">Sombre</option>
+        <option value="system" data-i18n="popup.themeSystem">Systeme</option>
+      </select>
+    </section>
+
+    <section class="settings-section">
+      <div class="settings-section-title" data-i18n="popup.settings.participantData">Participant Data</div>
+
+      <label class="popup-label" for="participantDataPrefixes" data-i18n="popup.filter">Filtre participant data</label>
+      <textarea
+        id="participantDataPrefixes"
+        class="popup-textarea"
+        rows="3"
+        placeholder="ex: customer|prefix1_|crm."></textarea>
+      <p class="hint" data-i18n="popup.filterHint">Un ou plusieurs prefixes separes par |. Laisser vide pour tout afficher.</p>
+
+      <div class="popup-section-title highlight-section-title" data-i18n="popup.highlight.title">Participant Data highlighting</div>
+      <p class="hint" data-i18n="popup.highlight.hint">Change the PiP background when a Participant Data name and value match exactly. Independent from the display filter. First match wins.</p>
+
+      <div class="highlight-rules">
+        <div class="highlight-rule" data-highlight-rule="1">
+          <div class="highlight-rule-head">
+            <span class="highlight-rule-drag-handle" draggable="true" tabindex="0" role="button" aria-label="Reorder rule" title="Drag to reorder">☰</span>
+            <button type="button" class="highlight-rule-toggle" data-highlight-toggle="1" aria-expanded="false">
+              <span class="highlight-rule-chevron" aria-hidden="true">›</span>
+              <strong data-i18n="popup.highlight.rule1">Rule 1</strong>
+            </button>
+            <label class="switch" data-i18n-title="popup.highlight.enable">
+              <input id="highlightEnabled1" type="checkbox">
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="highlight-rule-body" data-highlight-body="1" hidden>
+            <label class="popup-label" for="highlightName1" data-i18n="popup.highlight.name">Participant Data name</label>
+            <input id="highlightName1" class="popup-input" type="text" placeholder="e.g. customerType">
+            <label class="popup-label" for="highlightValue1" data-i18n="popup.highlight.value">Exact value</label>
+            <input id="highlightValue1" class="popup-input" type="text" placeholder="e.g. VIP">
+            <label class="popup-label" for="highlightColor1" data-i18n="popup.highlight.color">Background color</label>
+            <div class="color-row"><input id="highlightColor1" class="popup-color" type="color" value="#E8F4FF"><span id="highlightColorHex1" class="color-hex">#E8F4FF</span></div>
+          </div>
+        </div>
+
+        <div class="highlight-rule" data-highlight-rule="2">
+          <div class="highlight-rule-head">
+            <span class="highlight-rule-drag-handle" draggable="true" tabindex="0" role="button" aria-label="Reorder rule" title="Drag to reorder">☰</span>
+            <button type="button" class="highlight-rule-toggle" data-highlight-toggle="2" aria-expanded="false">
+              <span class="highlight-rule-chevron" aria-hidden="true">›</span>
+              <strong data-i18n="popup.highlight.rule2">Rule 2</strong>
+            </button>
+            <label class="switch" data-i18n-title="popup.highlight.enable">
+              <input id="highlightEnabled2" type="checkbox">
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="highlight-rule-body" data-highlight-body="2" hidden>
+            <label class="popup-label" for="highlightName2" data-i18n="popup.highlight.name">Participant Data name</label>
+            <input id="highlightName2" class="popup-input" type="text" placeholder="e.g. priority">
+            <label class="popup-label" for="highlightValue2" data-i18n="popup.highlight.value">Exact value</label>
+            <input id="highlightValue2" class="popup-input" type="text" placeholder="e.g. URGENT">
+            <label class="popup-label" for="highlightColor2" data-i18n="popup.highlight.color">Background color</label>
+            <div class="color-row"><input id="highlightColor2" class="popup-color" type="color" value="#FFF1D6"><span id="highlightColorHex2" class="color-hex">#FFF1D6</span></div>
+          </div>
+        </div>
+
+        <div class="highlight-rule" data-highlight-rule="3">
+          <div class="highlight-rule-head">
+            <span class="highlight-rule-drag-handle" draggable="true" tabindex="0" role="button" aria-label="Reorder rule" title="Drag to reorder">☰</span>
+            <button type="button" class="highlight-rule-toggle" data-highlight-toggle="3" aria-expanded="false">
+              <span class="highlight-rule-chevron" aria-hidden="true">›</span>
+              <strong data-i18n="popup.highlight.rule3">Rule 3</strong>
+            </button>
+            <label class="switch" data-i18n-title="popup.highlight.enable">
+              <input id="highlightEnabled3" type="checkbox">
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="highlight-rule-body" data-highlight-body="3" hidden>
+            <label class="popup-label" for="highlightName3" data-i18n="popup.highlight.name">Participant Data name</label>
+            <input id="highlightName3" class="popup-input" type="text" placeholder="e.g. segment">
+            <label class="popup-label" for="highlightValue3" data-i18n="popup.highlight.value">Exact value</label>
+            <input id="highlightValue3" class="popup-input" type="text" placeholder="e.g. PREMIUM">
+            <label class="popup-label" for="highlightColor3" data-i18n="popup.highlight.color">Background color</label>
+            <div class="color-row"><input id="highlightColor3" class="popup-color" type="color" value="#FFE3E3"><span id="highlightColorHex3" class="color-hex">#FFE3E3</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="settings-actions">
+      <button id="saveConfig" class="button button-secondary full-width" data-i18n="popup.save">Enregistrer</button>
+      <div id="saveStatus" class="save-status" role="status" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
