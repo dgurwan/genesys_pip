@@ -1,18 +1,18 @@
-export const APP_VERSION = '1.0.4';
+export const APP_VERSION = "1.0.0";
 
 // Valeurs fixes du projet: reglages par defaut, taille de la PiP, delais
 // d'attente et noms d'actions. Un seul endroit a modifier pour les ajuster.
 
 export const DEFAULT_SETTINGS = Object.freeze({
-  participantDataPrefixes: '',
+  participantDataPrefixes: "",
   participantDataHighlightRules: [
-    { participantDataName: '', value: '', color: '#E8F4FF', enabled: false },
-    { participantDataName: '', value: '', color: '#FFF1D6', enabled: false },
-    { participantDataName: '', value: '', color: '#FFE3E3', enabled: false }
+    { participantDataName: "", value: "", color: "#E8F4FF", enabled: false },
+    { participantDataName: "", value: "", color: "#FFF1D6", enabled: false },
+    { participantDataName: "", value: "", color: "#FFE3E3", enabled: false },
   ],
-  theme: 'light',
+  theme: "light",
   // 'system' = langue du navigateur. Voir src/i18n/index.js.
-  language: 'system'
+  language: "system",
 });
 
 export const PIP_WINDOW_OPTIONS = Object.freeze({
@@ -21,7 +21,7 @@ export const PIP_WINDOW_OPTIONS = Object.freeze({
   // PiP provides its own "Back to tab" action. Keep the native Chrome
   // return-to-opener control hidden so there is one clear way back to the
   // original Genesys tab, while leaving the companion open.
-  disallowReturnToOpener: true
+  disallowReturnToOpener: true,
 });
 
 export const TIMERS = Object.freeze({
@@ -33,12 +33,12 @@ export const TIMERS = Object.freeze({
   resumePendingMs: 1200,
   presencePendingMs: 2500,
   wrapupPendingMs: 6000,
-  routingPendingMs: 5000
+  routingPendingMs: 5000,
 });
 
 export const INTERACTION_ACTIONS = Object.freeze({
-  pickup: 'pickup',
-  disconnect: 'disconnect',
-  hold: 'hold',
-  resume: 'resume'
+  pickup: "pickup",
+  disconnect: "disconnect",
+  hold: "hold",
+  resume: "resume",
 });

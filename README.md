@@ -470,42 +470,8 @@ After changing `framework.js`, upload the file again to the Genesys Cloud integr
 
 ---
 
-## 16. Development guidelines
-
-### Preserve working behavior
-
-Every feature change should start from the latest known-good baseline and be implemented as a focused patch.
-
-Do not replace working interaction, wrap-up, authentication, or adapter logic when changing an unrelated UI feature.
-
-### Keep responsibilities separated
-
-- Genesys API calls stay in `framework.js`.
-- Integration-specific transport stays behind an adapter.
-- Interaction logic belongs in `src/interactions.js`.
-- Participant Data logic belongs in `src/participantData.js`.
-- UI rendering belongs in `src/pipView.js`.
-- Settings persistence belongs in `src/settings.js` and the extension popup.
-
-### Validate before release
-
-At minimum:
-
-1. Check JavaScript syntax for every `.js` file.
-2. Verify the manifest references files that exist.
-3. Verify imports resolve to existing modules.
-4. Run the incoming-call flow.
-5. Run answer / hold / resume / hang-up.
-6. Run mandatory wrap-up during and after the call.
-7. Test Participant Data filtering and highlighting independently.
-8. Test rule priority / drag-and-drop.
-9. Test Back to tab without closing PiP.
-10. Update the version and changelog.
-
----
-
 ## 17. Current version
 
-**1.0.4**
+**1.0.0**
 
 See `CHANGELOG.md` for the release history.

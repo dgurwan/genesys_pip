@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Genesys Cloud PiP Companion",
-  "version": "1.0.4",
+  "version": "1.0.0",
   "description": "PiP Genesys Cloud avec statut agent, On Queue, appels, wrap-up et participant data.",
   "action": {
     "default_title": "Genesys PiP",
