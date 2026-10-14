@@ -1,39 +1,131 @@
 <!doctype html>
 <!--
-  Onglet hote de l'extension, ouvert depuis le popup.
-  Il contient deux choses:
-   - l'iframe du Genesys Cloud Embeddable Framework (le "vrai" softphone)
-   - le bouton qui ouvre la fenetre Picture-in-Picture
-  Toute la logique est dans src/app.js.
+  Demo CRM host page for PiP Companion.
+  The CRM is intentionally local and fictitious: it provides a realistic work surface
+  around the real Genesys Cloud Embeddable Framework without adding any backend dependency.
 -->
-<html lang="fr">
+<html lang="en">
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Genesys Cloud PiP Companion</title>
+  <title>Genesys PS CRM - Genesys PiP Companion Demo</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body class="app-page" data-integration-adapter="embeddable-framework">
-  <main class="layout">
-    <section class="panel app-panel">
-      <div>
-        <h1 data-i18n="app.title">Genesys Cloud PiP Companion</h1>
-        <p data-i18n="app.intro">Ouvre Genesys Cloud Embeddable Framework et synchronise le statut agent vers la fenetre Picture-in-Picture.</p>
-      </div>
-      <button id="openPip" class="button button-primary" data-i18n="app.openPip">Ouvrir Picture-in-Picture</button>
-      <p id="pipSupport" class="hint"></p>
-    </section>
 
-    <section class="softphone-shell">
-      <iframe
-        id="softphone"
-        title="Genesys Cloud Embeddable Framework"
-        allow="camera *; microphone *; autoplay *; hid *"
-        src="https://apps.mypurecloud.ie/crm/embeddableFramework.html?dedicatedLoginWindow=true&enableFrameworkClientId=true">
-      </iframe>
-    </section>
+<body class="app-page" data-integration-adapter="embeddable-framework">
+  <main class="demo-crm">
+    <header class="crm-header">
+      <div class="crm-brand">
+        <span class="crm-brand-mark">N</span>
+        <div>
+          <strong>Genesys PS CRM</strong>
+          <span>Customer workspace</span>
+        </div>
+      </div>
+      <div class="crm-header-actions">
+        <label class="crm-theme-control" for="crmThemeSelect">
+          <span>Theme</span>
+          <select id="crmThemeSelect" aria-label="Demo CRM theme">
+            <option value="light">Light</option>
+            <option value="genesys">Genesys</option>
+            <option value="dark">Dark</option>
+            <option value="system">System</option>
+          </select>
+        </label>
+        <span class="crm-demo-badge">DEMO CRM</span>
+        <div class="crm-agent">
+          <span class="crm-agent-avatar">AG</span>
+          <div><strong>Gurwan DUPLENNE</strong><span>PS Representative</span></div>
+        </div>
+      </div>
+    </header>
+
+    <div class="crm-body">
+      <nav class="crm-sidebar" aria-label="CRM navigation">
+        <button class="crm-nav-item is-active" type="button"><span>⌂</span>Overview</button>
+        <button class="crm-nav-item" type="button"><span>◎</span>Customers</button>
+        <button class="crm-nav-item" type="button"><span>▣</span>Cases</button>
+        <button class="crm-nav-item" type="button"><span>◷</span>Activities</button>
+        <div class="crm-sidebar-spacer"></div>
+        <div class="crm-sidebar-note">Fictitious data for demonstration purposes only.</div>
+      </nav>
+
+      <section class="crm-workspace">
+        <div class="crm-toolbar">
+          <div>
+            <p class="crm-kicker">Customer 360</p>
+            <h1 id="crmCustomerName">John Smith</h1>
+          </div>
+          <label class="crm-search">
+            <span>⌕</span>
+            <select id="crmCustomerSelect" aria-label="Select demo customer"></select>
+          </label>
+        </div>
+
+        <div class="crm-customer-card">
+          <div class="crm-customer-summary">
+            <span id="crmCustomerAvatar" class="crm-customer-avatar">JS</span>
+            <div>
+              <div class="crm-name-line">
+                <h2 id="crmCustomerNameCard">John Smith</h2>
+                <span id="crmCustomerTier" class="crm-tier">Gold</span>
+              </div>
+              <p id="crmCustomerSubtitle">Customer since 2019 · English</p>
+            </div>
+          </div>
+          <div class="crm-detail-grid">
+            <div><span>Customer ID</span><strong id="crmCustomerId">CUST-10042</strong></div>
+            <div><span>Phone</span><strong id="crmCustomerPhone">+33 6 12 34 56 78</strong></div>
+            <div><span>Email</span><strong id="crmCustomerEmail">john.smith@example.com</strong></div>
+            <div><span>Preferred channel</span><strong id="crmPreferredChannel">Voice</strong></div>
+          </div>
+        </div>
+
+        <div class="crm-content-grid">
+          <section class="crm-section">
+            <div class="crm-section-heading">
+              <div>
+                <p class="crm-kicker">Case management</p>
+                <h2>Open cases</h2>
+              </div><span id="crmCaseCount" class="crm-count">1</span>
+            </div>
+            <div id="crmCases" class="crm-case-list"></div>
+          </section>
+
+          <section class="crm-section">
+            <div class="crm-section-heading">
+              <div>
+                <p class="crm-kicker">Timeline</p>
+                <h2>Recent activity</h2>
+              </div>
+            </div>
+            <div id="crmActivities" class="crm-activity-list"></div>
+          </section>
+        </div>
+      </section>
+
+      <aside class="genesys-sidebar">
+        <div class="genesys-header">
+          <div>
+            <span class="genesys-dot"></span>
+            <div><strong>Genesys Cloud</strong><span>Embedded Framework</span></div>
+          </div>
+          <button id="openPip" class="button button-primary" type="button" data-i18n="app.startCompanion">Start
+            Companion</button>
+        </div>
+        <p id="pipSupport" class="hint genesys-hint"></p>
+        <div class="softphone-shell">
+          <iframe id="softphone" title="Genesys Cloud Embeddable Framework"
+            allow="camera *; microphone *; autoplay *; hid *"
+            src="https://apps.mypurecloud.ie/crm/embeddableFramework.html?dedicatedLoginWindow=true&enableFrameworkClientId=true">
+          </iframe>
+        </div>
+      </aside>
+    </div>
   </main>
 
   <script type="module" src="src/app.js"></script>
 </body>
+
 </html>

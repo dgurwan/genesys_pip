@@ -152,3 +152,63 @@ export function findParticipantDataHighlightColor(rows, rules) {
 
   return '';
 }
+
+
+// Evaluate all enabled Context Rules in priority order. Unlike the legacy
+// highlight helper, this returns presentation/actions as well as color.
+export function evaluateParticipantDataContext(rows, rules) {
+  if (!Array.isArray(rows) || !Array.isArray(rules)) return [];
+  return rules.flatMap((rule, index) => {
+    if (!rule?.enabled) return [];
+    const name = String(rule.participantDataName || '').trim();
+    if (!name) return [];
+    const match = rows.find((row) =>
+      String(row?.rawKey || '') === name && String(row?.value ?? '') === String(rule.value ?? '')
+    );
+    if (!match) return [];
+    const displayRow = rule.displayEnabled && rule.displayField
+      ? rows.find((row) => String(row?.rawKey || '') === String(rule.displayField))
+      : null;
+    const actionEnabled = Boolean(rule.actionEnabled ?? rule.actionUrl);
+    const actionMode = rule.actionMode === 'attached' ? 'attached' : 'quick';
+    const resolvedActionUrl = actionEnabled
+      ? normalizeContextActionUrl(interpolateContextTemplate(String(rule.actionUrl || ''), rows))
+      : '';
+    const actionLabel = String(rule.actionLabel || '').trim();
+
+    // Build the runtime output explicitly. An attached link belongs to the
+    // displayed field itself; it must never be emitted as a separate action.
+    const attachedAction = actionEnabled && actionMode === 'attached' && displayRow && resolvedActionUrl
+      ? { label: actionLabel, url: resolvedActionUrl }
+      : null;
+    const quickAction = actionEnabled && actionMode === 'quick' && resolvedActionUrl
+      ? { label: actionLabel, url: resolvedActionUrl }
+      : null;
+
+    return [{
+      index,
+      color: rule.highlightActionEnabled !== false && /^#[0-9a-fA-F]{6}$/.test(String(rule.color || '')) ? String(rule.color) : '',
+      badge: rule.badgeEnabled ? String(rule.badge || '').trim() : '',
+      displayLabel: rule.displayEnabled ? String(rule.displayLabel || rule.displayField || '').trim() : '',
+      displayValue: displayRow ? String(displayRow.value ?? '') : '',
+      allowCopy: Boolean(rule.displayEnabled && rule.allowCopy),
+      attachedAction,
+      quickAction
+    }];
+  });
+}
+
+function interpolateContextTemplate(template, rows) {
+  return template.replace(/\{\{([^}]+)\}\}/g, (_, key) => {
+    const row = rows.find((item) => String(item?.rawKey || '') === String(key).trim());
+    return row ? encodeURIComponent(String(row.value ?? '')) : '';
+  });
+}
+
+function normalizeContextActionUrl(value) {
+  const url = String(value || '').trim();
+  if (!url) return '';
+  if (/^https:\/\//i.test(url)) return url;
+  if (/^www\./i.test(url)) return `https://${url}`;
+  return '';
+}

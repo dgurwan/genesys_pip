@@ -39,6 +39,10 @@ export function createInitialState() {
       error: null
     },
 
+    // Multiple simultaneous conversations are kept independently.
+    // `interaction` remains the currently selected conversation for backward compatibility.
+    interactions: new Map(),
+    selectedInteractionId: null,
     interaction: null,
     interactionAction: null,
     interactionActionTimer: null,

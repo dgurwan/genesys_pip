@@ -13,7 +13,19 @@ const highlightControls = [1, 2, 3].map((index) => ({
   name: document.getElementById(`highlightName${index}`),
   value: document.getElementById(`highlightValue${index}`),
   color: document.getElementById(`highlightColor${index}`),
+  highlightActionEnabled: document.getElementById(`contextHighlightEnabled${index}`),
   hex: document.getElementById(`highlightColorHex${index}`),
+  badgeEnabled: document.getElementById(`contextBadgeEnabled${index}`),
+  badge: document.getElementById(`contextBadge${index}`),
+  displayEnabled: document.getElementById(`contextDisplayEnabled${index}`),
+  displayField: document.getElementById(`contextDisplayField${index}`),
+  displayLabel: document.getElementById(`contextDisplayLabel${index}`),
+  allowCopy: document.getElementById(`contextAllowCopy${index}`),
+  actionEnabled: document.getElementById(`contextActionEnabled${index}`),
+  actionFields: document.getElementById(`contextActionFields${index}`),
+  actionLabel: document.getElementById(`contextActionLabel${index}`),
+  actionUrl: document.getElementById(`contextActionUrl${index}`),
+  actionModes: [...document.querySelectorAll(`input[name=\"contextActionMode${index}\"]`)],
   toggle: document.querySelector(`[data-highlight-toggle=\"${index}\"]`),
   body: document.querySelector(`[data-highlight-body=\"${index}\"]`),
   rule: document.querySelector(`[data-highlight-rule=\"${index}\"]`),
@@ -40,6 +52,8 @@ chrome.storage.local.get(DEFAULT_SETTINGS, (items) => {
 languageSelect.addEventListener('change', applyLanguage);
 
 saveConfigButton.addEventListener('click', () => {
+  const invalidControl = highlightControls.find((control) => !validateActionUrl(control));
+  if (invalidControl) { invalidControl.actionUrl.reportValidity(); invalidControl.actionUrl.focus(); return; }
   chrome.storage.local.set({
     participantDataPrefixes: prefixesInput.value.trim(),
     participantDataHighlightRules: collectHighlightRules(),
@@ -67,8 +81,23 @@ function applyHighlightRules(rules) {
     control.name.value = String(rule?.participantDataName || '');
     control.value.value = String(rule?.value || '');
     control.color.value = /^#[0-9a-fA-F]{6}$/.test(String(rule?.color || '')) ? rule.color : DEFAULT_SETTINGS.participantDataHighlightRules[index].color;
+    control.highlightActionEnabled.checked = rule?.highlightActionEnabled !== false;
     control.hex.textContent = control.color.value.toUpperCase();
+    control.badgeEnabled.checked = Boolean(rule?.badgeEnabled ?? rule?.badge);
+    control.badge.value = String(rule?.badge || '');
+    control.displayEnabled.checked = Boolean(rule?.displayEnabled ?? rule?.displayField);
+    control.displayField.value = String(rule?.displayField || '');
+    control.displayLabel.value = String(rule?.displayLabel || '');
+    control.allowCopy.checked = Boolean(rule?.allowCopy);
+    control.actionLabel.value = String(rule?.actionLabel || '');
+    control.actionUrl.value = String(rule?.actionUrl || '');
+    control.actionEnabled.checked = Boolean(rule?.actionEnabled ?? rule?.actionUrl);
+    const actionMode = rule?.actionMode === 'attached' ? 'attached' : 'quick';
+    control.actionModes.forEach((radio) => { radio.checked = radio.value === actionMode; });
+    syncActionFields(control);
+    syncRuleActionAvailability(control);
     setHighlightRuleExpanded(control, control.enabled.checked);
+    updateRulePresentation(control);
   });
 }
 
@@ -83,16 +112,92 @@ function refreshRuleLabels() {
   });
 }
 
+function updateRulePresentation(control) {
+  const index = control.rule?.dataset.highlightRule || '';
+  const condition = control.rule?.querySelector(`[data-rule-condition-summary="${index}"]`);
+  const actions = control.rule?.querySelector(`[data-rule-action-summary="${index}"]`);
+  const preview = control.rule?.querySelector(`[data-rule-preview-card="${index}"]`);
+  const name = control.name.value.trim();
+  const value = control.value.value.trim();
+  if (condition) condition.textContent = name ? `${name} = ${value || '…'}` : t('rules.notConfigured');
+
+  const labels = [];
+  if (control.highlightActionEnabled.checked) labels.push(t('rules.summaryHighlight'));
+  if (control.badgeEnabled.checked && control.badge.value.trim()) labels.push(t('rules.summaryBadge'));
+  if (control.displayEnabled.checked && control.displayField.value.trim()) labels.push(t('rules.summaryData'));
+  if (control.actionEnabled.checked) labels.push(t('rules.summaryLink'));
+  if (actions) actions.innerHTML = labels.map((label) => `<span>${label}</span>`).join('');
+
+  if (preview) {
+    const badge = control.badgeEnabled.checked ? control.badge.value.trim() : '';
+    const field = control.displayEnabled.checked ? control.displayField.value.trim() : '';
+    const fieldLabel = control.displayLabel.value.trim() || field || t('rules.summaryData');
+    const sampleValue = field ? `{{${field}}}` : '';
+    const actionMode = control.actionModes.find((radio) => radio.checked)?.value || 'quick';
+    const hasAttachedLink = control.actionEnabled.checked && actionMode === 'attached' && field;
+    const hasQuickLink = control.actionEnabled.checked && actionMode === 'quick';
+    const hasCopy = control.allowCopy.checked && field;
+    const parts = [];
+    if (badge) parts.push(`<div class="preview-badges"><span>${escapePreview(badge)}</span></div>`);
+    if (field) parts.push(`<div class="preview-field"><span>${escapePreview(fieldLabel)}</span><strong>${escapePreview(sampleValue)}</strong>${hasCopy ? '<b>⧉</b>' : ''}${hasAttachedLink ? '<b>↗</b>' : ''}</div>`);
+    preview.style.background = control.highlightActionEnabled.checked ? control.color.value : '';
+    preview.classList.toggle('has-highlight', control.highlightActionEnabled.checked);
+    if (hasQuickLink) parts.push(`<div class="preview-quick-action">↗ ${escapePreview(control.actionLabel.value.trim() || t('rules.open'))}</div>`);
+    preview.innerHTML = parts.length ? parts.join('') : `<span class="rule-preview-empty">${escapePreview(t('rules.previewEmpty'))}</span>`;
+  }
+}
+
+function escapePreview(value) {
+  return String(value || '').replace(/[&<>"']/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+}
+
 function setHighlightRuleExpanded(control, expanded) {
   control.body.hidden = !expanded;
   control.toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
   control.rule.classList.toggle('is-expanded', expanded);
-  control.chevron.textContent = expanded ? '⌄' : '›';
+  control.chevron.classList.toggle('open', expanded);
+}
+
+function syncRuleActionAvailability(control) {
+  const badgeOn = Boolean(control.badgeEnabled?.checked);
+  const dataOn = Boolean(control.displayEnabled?.checked);
+  if (control.badge) control.badge.disabled = !badgeOn;
+  [control.displayField, control.displayLabel, control.allowCopy].forEach((el) => { if (el) el.disabled = !dataOn; });
+  const attached = control.actionModes?.find((radio) => radio.value === 'attached');
+  if (attached) {
+    attached.disabled = !dataOn;
+    const label = attached.closest('label');
+    if (label) {
+      label.classList.toggle('is-disabled', !dataOn);
+      label.title = dataOn ? '' : t('rules.attachRequiresData');
+    }
+    if (!dataOn && attached.checked) {
+      const quick = control.actionModes.find((radio) => radio.value === 'quick');
+      if (quick) quick.checked = true;
+    }
+  }
+}
+
+function syncActionFields(control) {
+  const enabled = Boolean(control.actionEnabled?.checked);
+  if (control.actionFields) control.actionFields.hidden = !enabled;
 }
 
 highlightControls.forEach((control) => {
+  const presentationInputs = [control.name, control.value, control.color, control.highlightActionEnabled, control.badgeEnabled, control.badge, control.displayEnabled, control.displayField, control.displayLabel, control.allowCopy, control.actionEnabled, control.actionLabel, control.actionUrl, ...control.actionModes];
+  presentationInputs.forEach((input) => input?.addEventListener('input', () => updateRulePresentation(control)));
+  presentationInputs.forEach((input) => input?.addEventListener('change', () => updateRulePresentation(control)));
+  control.actionEnabled?.addEventListener('change', () => { syncActionFields(control); validateActionUrl(control); updateRulePresentation(control); });
+  control.badgeEnabled?.addEventListener('change', () => { syncRuleActionAvailability(control); updateRulePresentation(control); });
+  control.displayEnabled?.addEventListener('change', () => { syncRuleActionAvailability(control); updateRulePresentation(control); });
+  control.actionUrl?.addEventListener('blur', () => {
+    const normalized = normalizeHttpsUrl(control.actionUrl.value);
+    if (normalized && /^https:\/\//i.test(normalized)) control.actionUrl.value = normalized;
+    validateActionUrl(control);
+  });
   control.enabled.addEventListener('change', () => {
     setHighlightRuleExpanded(control, control.enabled.checked);
+    updateRulePresentation(control);
   });
 
   control.toggle.addEventListener('click', () => {
@@ -115,12 +220,40 @@ function getHighlightRulesInDomOrder() {
     .filter(Boolean);
 }
 
+function normalizeHttpsUrl(value) {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return '';
+  if (/^https:\/\//i.test(trimmed)) return trimmed;
+  if (/^(www\.|[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:[/:?#]|$))/i.test(trimmed)) return `https://${trimmed}`;
+  return trimmed;
+}
+
+function validateActionUrl(control) {
+  if (!control.actionEnabled?.checked) return true;
+  const value = normalizeHttpsUrl(control.actionUrl.value);
+  const valid = !value || /^https:\/\//i.test(value);
+  control.actionUrl.classList.toggle('input-error', !valid);
+  control.actionUrl.setCustomValidity(valid ? '' : (languageSelect.value === 'fr' ? 'Utilisez une URL HTTPS.' : 'Use an HTTPS URL.'));
+  return valid;
+}
+
 function collectHighlightRules() {
   return getHighlightRulesInDomOrder().map((control) => ({
     participantDataName: control.name.value.trim(),
     value: control.value.value,
     color: control.color.value.toUpperCase(),
-    enabled: control.enabled.checked
+    highlightActionEnabled: control.highlightActionEnabled.checked,
+    enabled: control.enabled.checked,
+    badgeEnabled: control.badgeEnabled.checked,
+    badge: control.badge.value.trim(),
+    displayEnabled: control.displayEnabled.checked,
+    displayField: control.displayField.value.trim(),
+    displayLabel: control.displayLabel.value.trim(),
+    allowCopy: control.allowCopy.checked,
+    actionEnabled: control.actionEnabled.checked,
+    actionLabel: control.actionLabel.value.trim(),
+    actionUrl: control.actionEnabled.checked ? normalizeHttpsUrl(control.actionUrl.value) : '',
+    actionMode: control.actionModes.find((radio) => radio.checked)?.value || 'quick'
   }));
 }
 

@@ -475,3 +475,6 @@ After changing `framework.js`, upload the file again to the Genesys Cloud integr
 **1.0.0**
 
 See `CHANGELOG.md` for the release history.
+
+### Context Rules
+Participant Data rules can now combine the existing conversation highlight with a badge, a displayed Participant Data field, an optional copy button, and an HTTPS action. URLs support `{{ParticipantDataName}}` placeholders, for example `https://crm.example/customer/{{CustomerId}}`. Existing highlight-only rules remain compatible.

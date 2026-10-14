@@ -6,9 +6,9 @@ export const APP_VERSION = "1.0.0";
 export const DEFAULT_SETTINGS = Object.freeze({
   participantDataPrefixes: "",
   participantDataHighlightRules: [
-    { participantDataName: "", value: "", color: "#E8F4FF", enabled: false },
-    { participantDataName: "", value: "", color: "#FFF1D6", enabled: false },
-    { participantDataName: "", value: "", color: "#FFE3E3", enabled: false },
+    { participantDataName: "", value: "", color: "#E8F4FF", highlightActionEnabled: true, enabled: false, badgeEnabled: false, badge: "", displayEnabled: false, displayField: "", displayLabel: "", allowCopy: false, actionEnabled: false, actionLabel: "", actionUrl: "", actionMode: "quick" },
+    { participantDataName: "", value: "", color: "#FFF1D6", highlightActionEnabled: true, enabled: false, badgeEnabled: false, badge: "", displayEnabled: false, displayField: "", displayLabel: "", allowCopy: false, actionEnabled: false, actionLabel: "", actionUrl: "", actionMode: "quick" },
+    { participantDataName: "", value: "", color: "#FFE3E3", highlightActionEnabled: true, enabled: false, badgeEnabled: false, badge: "", displayEnabled: false, displayField: "", displayLabel: "", allowCopy: false, actionEnabled: false, actionLabel: "", actionUrl: "", actionMode: "quick" },
   ],
   theme: "light",
   // 'system' = langue du navigateur. Voir src/i18n/index.js.

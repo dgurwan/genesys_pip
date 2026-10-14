@@ -12,7 +12,7 @@ import {
   getPresenceDotClass,
   getSelectedPresenceForPrimary,
 } from "./presence.js";
-import { filterParticipantData, findParticipantDataHighlightColor } from "./participantData.js";
+import { filterParticipantData, evaluateParticipantDataContext } from "./participantData.js";
 import { isWrapupPending } from "./interactions.js";
 import { t } from "./i18n/index.js";
 import { normalizeKey } from "./utils.js";
@@ -43,10 +43,11 @@ export function renderPipHtml(state, resolvedTheme) {
   const status = getDisplayAgentStatus(state);
   const isOnQueue = state.presence.queueState === "on";
   const hasPresence = state.presence.grouped.length > 0;
-  const participantHighlightColor = findParticipantDataHighlightColor(
+  const contextMatches = evaluateParticipantDataContext(
     state.interaction?.participantData || [],
     state.settings.participantDataHighlightRules || []
   );
+  const participantHighlightColor = contextMatches.find((match) => match.color)?.color || '';
 
   // Tant que Genesys n'a rien renvoye, on ne devine pas: afficher "Off Queue"
   // et "Inconnu" par defaut donnait un statut faux a l'ouverture de la PiP.
@@ -66,13 +67,12 @@ export function renderPipHtml(state, resolvedTheme) {
           state.presence.selectedPrimary,
         );
 
+  // Presence and routing eligibility are independent controls. Keep the
+  // actual presence label here; the compact switch on the right carries
+  // On Queue / Off Queue without duplicating that text.
   const statusLabel = !presenceReady
     ? t("presence.loading")
-    : formatPresenceLabel(
-        isOnQueue
-          ? state.presence.queue.onQueue?.label || status.label || t("queue.on")
-          : status.label || t("presence.unknown"),
-      ) || t("presence.unknown");
+    : formatPresenceLabel(status.label || t("presence.unknown")) || t("presence.unknown");
 
   return `
     <div class="pip-shell theme-${escapeHtml(resolvedTheme)}">
@@ -81,12 +81,14 @@ export function renderPipHtml(state, resolvedTheme) {
           <button id="presenceMenuToggle" type="button" class="presence-current" ${hasPresence ? "" : "disabled"} title="${escapeHtml(t("presence.change"))}">
             <span class="presence-dot ${dotClass}"></span>
             <span class="presence-current-label">${escapeHtml(statusLabel)}</span>
-            <span class="presence-current-chevron">${state.presence.menuOpen ? "⌃" : "⌄"}</span>
+            <span class="presence-current-chevron ${state.presence.menuOpen ? "open" : ""}" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="m5.5 7.5 4.5 4.5 4.5-4.5"/></svg></span>
           </button>
 
-          <button id="queueToggle" type="button" class="queue-toggle ${isOnQueue ? "on" : "off"}" title="${escapeHtml(t("queue.toggle"))}" ${statusKnown ? "" : "disabled"}>
-            <span class="queue-toggle-track"><span class="queue-toggle-thumb"></span></span>
-            <span class="queue-toggle-label">${statusKnown ? escapeHtml(isOnQueue ? t("queue.on") : t("queue.off")) : "..."}</span>
+          <button id="queueToggle" type="button" class="queue-toggle ${isOnQueue ? "on" : "off"}"
+            title="${escapeHtml(isOnQueue ? t("queue.goOff") : t("queue.goOn"))}"
+            aria-label="${escapeHtml(isOnQueue ? t("queue.goOff") : t("queue.goOn"))}"
+            aria-pressed="${isOnQueue ? "true" : "false"}" ${statusKnown ? "" : "disabled"}>
+            <span class="queue-toggle-track" aria-hidden="true"><span class="queue-toggle-thumb"></span></span>
           </button>
         </div>
 
@@ -98,7 +100,8 @@ export function renderPipHtml(state, resolvedTheme) {
       </section>
 
       ${state.routing.noAnswer ? renderNoAnswerCard(state) : ""}
-      ${state.interaction ? renderInteractionCard(state, participantHighlightColor) : ""}
+      ${state.interactions?.size > 1 ? renderInteractionTabs(state) : ""}
+      ${state.interaction ? renderInteractionCard(state, participantHighlightColor, contextMatches) : ""}
       ${!state.routing.noAnswer && !state.interaction ? `<div class="empty-state">${escapeHtml(t("call.none"))}</div>` : ""}
 
       <div class="pip-footer">
@@ -198,7 +201,41 @@ function renderNoAnswerCard(state) {
   `;
 }
 
-function renderInteractionCard(state, participantHighlightColor = "") {
+function getPhaseLabel(interaction) {
+  const phase = interaction?.phase || 'unknown';
+  if (phase !== 'alerting') return t(`phase.${phase}`);
+  if (interaction?.mediaType === 'message') return t('phase.alertingMessage');
+  if (interaction?.mediaType === 'email') return t('phase.alertingEmail');
+  if (interaction?.mediaType === 'callback') return t('phase.alertingCallback');
+  return t('phase.alerting');
+}
+
+function getMediaIcon(mediaType) {
+  if (mediaType === 'message') return Icons.message;
+  if (mediaType === 'email') return Icons.email;
+  if (mediaType === 'callback') return Icons.callback;
+  return Icons.voice;
+}
+
+function renderInteractionTabs(state) {
+  const interactions = [...state.interactions.values()];
+  return `
+    <nav class="interaction-tabs" aria-label="Active interactions">
+      ${interactions.map((interaction) => {
+        const selected = interaction.id === state.selectedInteractionId;
+        const mediaType = interaction.mediaType || 'voice';
+        const mediaIcon = getMediaIcon(mediaType);
+        return `
+          <button type="button" class="interaction-tab ${selected ? 'active' : ''} ${escapeHtml(interaction.phase || '')}" data-interaction-id="${escapeHtml(interaction.id)}" title="${escapeHtml(interaction.caller || mediaType)}">
+            <span class="interaction-tab-icon" aria-hidden="true">${mediaIcon}</span>
+            <span class="interaction-tab-label">${escapeHtml(interaction.caller || mediaType)}</span>
+            <span class="interaction-tab-state"></span>
+          </button>`;
+      }).join('')}
+    </nav>`;
+}
+
+function renderInteractionCard(state, participantHighlightColor = "", contextMatches = []) {
   const interaction = state.interaction;
   const action = state.interactionAction;
   const phase = interaction.phase || "unknown";
@@ -215,23 +252,55 @@ const highlightClass = participantHighlightColor ? " has-participant-highlight" 
   return `
     <section class="pip-card interaction-card ${escapeHtml(phase)}">
       <div class="call-band${highlightClass}"${highlightStyle}>
-        <span class="call-rail"></span>
         <div class="call-band-body">
           <div class="call-band-top">
-            <span class="call-caller">${escapeHtml(interaction.caller || t("phase.unknown"))}</span>
+            <span class="call-media-icon media-${escapeHtml(interaction.mediaType || 'voice')}" aria-hidden="true">${getMediaIcon(interaction.mediaType)}</span><span class="call-caller">${escapeHtml(interaction.caller || t("phase.unknown"))}</span>
             <span id="callTimer" class="call-timer ${isFinished ? "muted" : ""}">${escapeHtml(elapsed)}</span>
           </div>
           <div class="call-band-meta">
-            <span class="call-state-pill">${escapeHtml(t(`phase.${phase}`))}</span>
+            <span class="call-state-dot" aria-hidden="true"></span>
+            <span class="call-state-text">${escapeHtml(getPhaseLabel(interaction))}</span>
+            <span class="call-meta-separator" aria-hidden="true">·</span>
             <span class="call-queue">${escapeHtml(isFinished ? t("call.finished") : interaction.queueName || "")}</span>
+            ${renderInteractionDetailsTrigger(state)}
           </div>
-          ${renderCallData(state)}
+          ${renderBusinessContext(contextMatches)}
+          ${renderInteractionDetailsPopover(state)}
           ${isWrapupPending(interaction) ? renderWrapupBlock(state) : ""}
            ${action?.id === interaction.id ? `<div class="action-processing">${escapeHtml(action.label)}</div>` : renderCallActions(state)}
         </div>
       </div>      
   </section>
   `;
+}
+
+
+
+function renderBusinessContext(matches) {
+  const rulesHtml = renderContextRules(matches);
+  if (!rulesHtml) return "";
+  return `<div class="business-context-surface">${rulesHtml}</div>`;
+}
+
+function renderContextRules(matches) {
+  if (!Array.isArray(matches) || !matches.length) return "";
+  const badges = matches.filter((item) => item.badge).map((item) => `<span class="context-badge">${escapeHtml(item.badge)}</span>`).join("");
+  const fields = matches.filter((item) => item.displayValue).map((item) => {
+    const attachedAction = item.attachedAction?.url ? item.attachedAction : null;
+    return `
+    <div class="context-field" title="${escapeHtml(item.displayLabel || t('rules.summaryData'))}">
+      <span class="context-field-label">${escapeHtml(item.displayLabel || t('rules.summaryData'))}</span>
+      <strong>${escapeHtml(item.displayValue)}</strong>
+      ${item.allowCopy ? `<button type="button" class="context-icon-button context-copy" data-copy-value="${escapeHtml(item.displayValue)}" title="${escapeHtml(t('rules.copy'))}" aria-label="${escapeHtml(t('rules.copy'))}"><span class="context-button-icon">${Icons.copy}</span><span class="context-button-feedback" aria-hidden="true"></span></button>` : ""}
+      ${attachedAction ? `<button type="button" class="context-icon-button context-url-action" data-context-url="${escapeHtml(attachedAction.url)}" title="${escapeHtml(attachedAction.label || t('rules.open'))}" aria-label="${escapeHtml(attachedAction.label || t('rules.open'))}">${Icons.externalLink}</button>` : ""}
+    </div>`;
+  }).join("");
+  const quickActions = matches.filter((item) => item.quickAction?.url).map((item) => {
+    const action = item.quickAction;
+    return `<button type="button" class="context-link-action" data-context-url="${escapeHtml(action.url)}" title="${escapeHtml(action.label || t('rules.open'))}" aria-label="${escapeHtml(action.label || t('rules.open'))}">${Icons.externalLink}<span>${escapeHtml(action.label || t('rules.open'))}</span></button>`;
+  }).join("");
+  if (!badges && !fields && !quickActions) return "";
+  return `<div class="context-rule-output">${badges ? `<div class="context-badges">${badges}</div>` : ""}${fields ? `<div class="context-fields">${fields}</div>` : ""}${quickActions ? `<div class="context-quick-actions">${quickActions}</div>` : ""}</div>`;
 }
 
 // Le wrap-up est saisissable pendant l'appel: pas de panneau qui s'interpose
@@ -283,26 +352,42 @@ function renderCallActions(state) {
   if (interaction.phase === "alerting") {
     return `
       <div class="action-grid">
-        <button id="answerCall" type="button" class="icon-action success">${Icons.answer}<span>${escapeHtml(t("action.answer"))}</span></button>
-        <button id="rejectCall" type="button" class="icon-action danger">${Icons.reject}<span>${escapeHtml(t("action.reject"))}</span></button>
+        <button id="answerCall" type="button" class="icon-action success" title="${escapeHtml(t("action.answer"))}" aria-label="${escapeHtml(t("action.answer"))}">${Icons.answer}</button>
+        <button id="rejectCall" type="button" class="icon-action danger" title="${escapeHtml(t("action.reject"))}" aria-label="${escapeHtml(t("action.reject"))}">${Icons.reject}</button>
       </div>
     `;
   }
 
   if (interaction.phase === "connected") {
+    if (interaction.mediaType === 'message' || interaction.mediaType === 'email') {
+      return `
+        <div class="action-grid single digital-actions">
+          <button id="hangupCall" type="button" class="icon-action danger" title="${escapeHtml(t("action.endConversation"))}" aria-label="${escapeHtml(t("action.endConversation"))}">${Icons.endConversation}</button>
+        </div>
+      `;
+    }
     return `
       <div class="action-grid">
-        <button id="holdCall" type="button" class="icon-action warning">${Icons.pause}<span>${escapeHtml(t("action.hold"))}</span></button>
-        <button id="hangupCall" type="button" class="icon-action danger">${Icons.hangup}<span>${escapeHtml(t("action.hangup"))}</span></button>
+        <button id="holdCall" type="button" class="icon-action warning" title="${escapeHtml(t("action.hold"))}" aria-label="${escapeHtml(t("action.hold"))}">${Icons.pause}</button>
+        <button id="hangupCall" type="button" class="icon-action danger" title="${escapeHtml(t("action.hangup"))}" aria-label="${escapeHtml(t("action.hangup"))}">${Icons.hangup}</button>
       </div>
     `;
   }
 
   if (interaction.phase === "held") {
+    // Hold/resume is a voice/callback control. A digital interaction must never
+    // inherit these controls from another simultaneously active conversation.
+    if (interaction.mediaType === 'message' || interaction.mediaType === 'email') {
+      return `
+        <div class="action-grid single digital-actions">
+          <button id="hangupCall" type="button" class="icon-action danger" title="${escapeHtml(t("action.endConversation"))}" aria-label="${escapeHtml(t("action.endConversation"))}">${Icons.endConversation}</button>
+        </div>
+      `;
+    }
     return `
       <div class="action-grid">
-        <button id="resumeCall" type="button" class="icon-action success">${Icons.resume}<span>${escapeHtml(t("action.resume"))}</span></button>
-        <button id="hangupCall" type="button" class="icon-action danger">${Icons.hangup}<span>${escapeHtml(t("action.hangup"))}</span></button>
+        <button id="resumeCall" type="button" class="icon-action success" title="${escapeHtml(t("action.resume"))}" aria-label="${escapeHtml(t("action.resume"))}">${Icons.resume}</button>
+        <button id="hangupCall" type="button" class="icon-action danger" title="${escapeHtml(t("action.hangup"))}" aria-label="${escapeHtml(t("action.hangup"))}">${Icons.hangup}</button>
       </div>
     `;
   }
@@ -310,48 +395,50 @@ function renderCallActions(state) {
   return `<div class="status-note">${escapeHtml(t("call.syncing"))}</div>`;
 }
 
-// Replie par defaut: sur un widget toujours au premier plan, les participant
-// data ne doivent jamais pousser les boutons hors de l'ecran.
-function renderCallData(state) {
-  const interaction = state.interaction;
-  const filteredRows = filterParticipantData(
-    interaction.participantData || [],
+// Raw Participant Data are secondary information. They live in an on-demand
+// full-card details panel instead of consuming permanent vertical space.
+function getInteractionDetailRows(state) {
+  return filterParticipantData(
+    state.interaction?.participantData || [],
     state.settings.participantDataPrefixes,
   );
-  const isOpen = state.callDataOpen;
-
-  return `
-    <div class="call-data-card">
-      <button id="toggleCallData" type="button" class="call-data-toggle" aria-expanded="${isOpen ? "true" : "false"}">
-        <span class="call-data-chevron">${isOpen ? "⌄" : "›"}</span>
-        <span class="call-data-title">${escapeHtml(t("callData.title"))}</span>
-        <span class="call-data-count">${filteredRows.length}</span>
-      </button>
-
-      ${
-        isOpen
-          ? `
-        <div class="call-data-body">
-          <div class="call-data-row"><span>${escapeHtml(t("callData.caller"))}</span><strong>${escapeHtml(interaction.caller || "")}</strong></div>
-          <div class="call-data-subtitle">${escapeHtml(t("callData.participants"))}</div>
-          ${
-            filteredRows.length
-              ? filteredRows
-                  .map(
-                    (row) => `
-            <div class="call-data-row participant-row">
-              <span title="${escapeHtml(row.rawKey || row.key)}">${escapeHtml(row.key)}</span>
-              <strong>${escapeHtml(row.value)}</strong>
-            </div>
-          `,
-                  )
-                  .join("")
-              : `<div class="call-data-empty">${escapeHtml(t("callData.empty"))}</div>`
-          }
-        </div>
-      `
-          : ""
-      }
-    </div>
-  `;
 }
+
+function renderInteractionDetailsTrigger(state) {
+  const count = getInteractionDetailRows(state).length;
+  return `
+    <button id="openInteractionDetails" type="button" class="interaction-details-trigger" title="${escapeHtml(t("callData.title"))}" aria-label="${escapeHtml(t("callData.title"))}">
+      <span class="interaction-details-info" aria-hidden="true">i</span>
+      <span class="interaction-details-count">${count}</span>
+    </button>`;
+}
+
+function renderInteractionDetailsPopover(state) {
+  const rows = getInteractionDetailRows(state);
+  return `
+    <div id="interactionDetailsBackdrop" class="interaction-details-backdrop" hidden>
+      <section class="interaction-details-panel" role="dialog" aria-modal="true" aria-labelledby="interactionDetailsTitle">
+        <header class="interaction-details-head">
+          <div>
+            <strong id="interactionDetailsTitle">${escapeHtml(t("callData.title"))}</strong>
+            <span>${rows.length}</span>
+          </div>
+          <button id="closeInteractionDetails" type="button" class="interaction-details-close" title="Fermer" aria-label="Fermer">&times;</button>
+        </header>
+        <div class="interaction-details-list">
+          ${rows.length ? rows.map((row) => `
+            <div class="interaction-details-row">
+              <div class="interaction-details-value">
+                <span title="${escapeHtml(row.rawKey || row.key)}">${escapeHtml(row.key)}</span>
+                <strong title="${escapeHtml(row.value)}">${escapeHtml(row.value)}</strong>
+              </div>
+              <button type="button" class="context-icon-button context-copy" data-copy-value="${escapeHtml(row.value)}" title="Copy ${escapeHtml(row.key)}" aria-label="Copy ${escapeHtml(row.key)}">
+                <span class="context-button-icon">${Icons.copy}</span>
+                <span class="context-button-feedback" aria-hidden="true"></span>
+              </button>
+            </div>`).join("") : `<div class="interaction-details-empty">${escapeHtml(t("callData.empty"))}</div>`}
+        </div>
+      </section>
+    </div>`;
+}
+

@@ -23,7 +23,6 @@ import {
   syncSelectedPrimary
 } from './presence.js';
 import {
-  ACTIVE_PHASES,
   extractEndedInteractionId,
   extractInteractionFromMessage,
   isWrapupPending,
@@ -33,6 +32,7 @@ import {
 import { copyStylesToPip, renderPipHtml } from './pipView.js';
 import { formatDuration, normalizeKey } from './utils.js';
 import { setLanguage, t, translateDocument } from './i18n/index.js';
+import { getDemoCrmContext, initDemoCrm, openDemoCrmCase, openDemoCrmCustomer, screenPopFromParticipantData } from './demoCrm.js';
 
 const softphone = document.getElementById('softphone');
 const openPipButton = document.getElementById('openPip');
@@ -41,10 +41,12 @@ const integrationKind = document.body.dataset.integrationAdapter || 'embeddable-
 const integrationAdapter = createIntegrationAdapter(integrationKind, softphone);
 const state = createInitialState();
 const ENDED_INTERACTION_TTL_MS = 60000;
+let startCompanionPending = false;
 
 bootstrap();
 
 async function bootstrap() {
+  initDemoCrm();
   state.settings = await loadSettings();
   setLanguage(state.settings.language);
   translateDocument();
@@ -68,7 +70,7 @@ async function bootstrap() {
     startFrameworkPing();
   });
 
-  openPipButton.addEventListener('click', openPipWindow);
+  openPipButton.addEventListener('click', startCompanion);
   window.addEventListener('message', handleGenesysMessage);
 
   // Le chrono met a jour le seul noeud concerne. Un renderPip() chaque seconde
@@ -82,6 +84,38 @@ function updateCallTimer() {
   if (!element || !state.interaction?.startTime) return;
 
   element.textContent = formatDuration(Date.now() - state.interaction.startTime);
+}
+
+async function startCompanion() {
+  if (openPipButton.disabled) return;
+
+  openPipButton.disabled = true;
+  try {
+    // requestWindow() must remain directly in the user-click chain. Once the
+    // PiP exists, changing Genesys presence no longer needs browser activation.
+    if (!state.pipWindow || state.pipWindow.closed) {
+      await openPipWindow();
+    }
+
+    if (state.presence.queueState === 'on') return;
+
+    const onQueue = state.presence.queue.onQueue;
+    if (onQueue?.id) {
+      goOnQueue();
+      return;
+    }
+
+    // Presence definitions can arrive after the PiP opens. Remember the user's
+    // intent and complete Start Companion as soon as Genesys provides On Queue.
+    startCompanionPending = true;
+    if (state.frameworkReady) integrationAdapter.requestPresenceDefinitions();
+  } catch (error) {
+    startCompanionPending = false;
+    console.error('[PiP] Unable to start companion:', error);
+    pipSupport.textContent = t('app.startCompanionError');
+  } finally {
+    openPipButton.disabled = !('documentPictureInPicture' in window);
+  }
 }
 
 async function openPipWindow() {
@@ -170,7 +204,11 @@ function handleGenesysMessage(event) {
 
     case 'genesys:user:presence':
     case 'userActionSubscription':
+      applyPresenceMessage(message);
+      return;
+
     case 'notificationSubscription':
+      if (applyEmbeddedInteractionSelection(message)) return;
       applyPresenceMessage(message);
       return;
 
@@ -242,6 +280,20 @@ function handleGenesysMessage(event) {
   }
 }
 
+function applyEmbeddedInteractionSelection(message) {
+  const category = String(message?.data?.category || '').toLowerCase();
+  if (category !== 'interactionselection') return false;
+
+  const payload = message?.data?.data;
+  const interactionId = typeof payload === 'string'
+    ? payload
+    : payload?.id || payload?.interactionId || payload?.interaction?.id || null;
+
+  if (!interactionId || !state.interactions.has(interactionId)) return true;
+  selectInteraction(interactionId);
+  return true;
+}
+
 function applyPresenceDefinitions(data) {
   state.presence.grouped = Array.isArray(data.groupedStatuses) ? data.groupedStatuses : [];
   state.presence.queue = data.queuePresence || { onQueue: null, offQueue: null };
@@ -249,6 +301,14 @@ function applyPresenceDefinitions(data) {
 
   syncQueueState(state);
   syncSelectedPrimary(state);
+
+  if (startCompanionPending && state.presence.queueState !== 'on' && state.presence.queue.onQueue?.id) {
+    startCompanionPending = false;
+    goOnQueue();
+    return;
+  }
+
+  startCompanionPending = false;
   renderPip();
 }
 
@@ -323,13 +383,17 @@ function applyRoutingMessage(message) {
 }
 
 function applyInteractionMessage(message) {
-  const endedId = extractEndedInteractionId(message, state.routing.userId, state.interaction);
+  const messageId = message.data?.conversation?.id || message.data?.eventBody?.id || message.data?.interaction?.new?.id || message.data?.interaction?.id || message.data?.interactionId || null;
+  const knownInteraction = messageId ? state.interactions.get(messageId) : state.interaction;
+  const endedId = extractEndedInteractionId(message, state.routing.userId, knownInteraction);
   if (endedId) {
     // Regression guard: a terminal notification can arrive without carrying
     // wrapupRequired, even though the active interaction state already knows
     // that the queue requires ACW. Never drop that interaction in that case.
     // Move it to wrap-up and keep the PiP visible until the code is submitted.
-    if (state.interaction?.id === endedId && isWrapupPending(state.interaction)) {
+    const endedInteraction = state.interactions.get(endedId);
+    if (endedInteraction && isWrapupPending(endedInteraction)) {
+      selectInteraction(endedId, false);
       state.interaction = {
         ...state.interaction,
         phase: 'wrapup',
@@ -353,7 +417,12 @@ function applyInteractionMessage(message) {
     }
 
     markInteractionEnded(endedId);
-    if (state.interaction?.id === endedId) state.interaction = null;
+    state.interactions.delete(endedId);
+    if (state.selectedInteractionId === endedId) {
+      const fallback = [...state.interactions.values()][0] || null;
+      state.selectedInteractionId = fallback?.id || null;
+      state.interaction = fallback;
+    }
     if (state.interactionAction?.id === endedId) clearInteractionAction();
     resetWrapup();
     renderPip();
@@ -363,20 +432,38 @@ function applyInteractionMessage(message) {
   const nextInteraction = extractInteractionFromMessage(message, state.routing.userId);
   if (!nextInteraction) return;
 
-  // Un etat actif est toujours prioritaire sur un ancien marquage "termine":
-  // Genesys peut re-proposer la meme conversation au meme agent.
-  if (ACTIVE_PHASES.includes(nextInteraction.phase)) {
-    state.endedInteractions.delete(nextInteraction.id);
-  } else if (isInteractionEnded(nextInteraction.id)) {
-    return;
+  // Once a conversation has received a confirmed terminal event, keep the
+  // tombstone for a short period. Late EF / WebSocket notifications can carry
+  // an older CONNECTED state and must never resurrect the interaction. A new
+  // Genesys interaction is expected to have a new conversation id.
+  if (isInteractionEnded(nextInteraction.id)) {
+    // Genesys can re-offer the same conversation after NOT_RESPONDING. An
+    // explicit ALERTING event is a new active lifecycle for PiP and clears the
+    // short-lived tombstone; stale CONNECTED events remain ignored.
+    if (nextInteraction.phase === 'alerting') state.endedInteractions.delete(nextInteraction.id);
+    else return;
   }
 
   state.routing.noAnswer = false;
-  state.interaction = mergeInteraction(state.interaction, nextInteraction, state.interactionAction);
+  const previousInteraction = state.interactions.get(nextInteraction.id) || null;
+  const mergedInteraction = mergeInteraction(previousInteraction, nextInteraction, state.interactionAction);
+  state.interactions.set(mergedInteraction.id, mergedInteraction);
+
+  // Keep the user's current selection. A newly alerting conversation is selected
+  // automatically so it cannot be missed; otherwise the first conversation wins.
+  if (!state.selectedInteractionId || !state.interactions.has(state.selectedInteractionId) || mergedInteraction.phase === 'alerting') {
+    state.selectedInteractionId = mergedInteraction.id;
+  }
+  state.interaction = state.interactions.get(state.selectedInteractionId) || mergedInteraction;
+
+  // Demo CRM screen pop: participant data remain the source of truth.
+  // Unknown/missing customer IDs are ignored so the Genesys interaction flow is never blocked.
+  screenPopFromParticipantData(state.interaction.participantData);
 
   // Si Genesys n'a transmis aucune date exploitable, le chrono part du moment
   // ou l'extension a vu l'appel pour la premiere fois.
   if (!state.interaction.startTime) state.interaction.startTime = Date.now();
+  state.interactions.set(state.interaction.id, state.interaction);
 
   // Les parametres ACW de la file sont resolus des l'arrivee de l'appel.
   // Cela permet d'afficher le wrap-up des que la file le rend obligatoire,
@@ -436,6 +523,10 @@ function applyWrapupCodes(data) {
       ...state.interaction,
       wrapupRequired: requiredFromQueue || requiredFromInteraction
     };
+    // Keep the multi-interaction store authoritative too. Without this, the next
+    // notification could restore the pre-queue-policy copy and hide the wrap-up
+    // selector again while the interaction was still connected.
+    state.interactions.set(state.interaction.id, state.interaction);
     state.wrapup.loadedForInteractionId = state.interaction.id;
   }
 
@@ -458,6 +549,8 @@ function bindPipEvents() {
   const doc = state.pipWindow?.document;
   if (!doc) return;
 
+  doc.querySelectorAll('[data-interaction-id]').forEach((button) => button.addEventListener('click', () => selectInteraction(button.dataset.interactionId)));
+
   doc.getElementById('queueToggle')?.addEventListener('click', toggleQueueState);
   doc.getElementById('presenceMenuToggle')?.addEventListener('click', togglePresenceMenu);
   doc.querySelector('.presence-menu')?.addEventListener('click', handlePresenceMenuClick);
@@ -467,10 +560,37 @@ function bindPipEvents() {
   doc.getElementById('holdCall')?.addEventListener('click', () => startInteractionAction(INTERACTION_ACTIONS.hold, t('action.holding')));
   doc.getElementById('resumeCall')?.addEventListener('click', () => startInteractionAction(INTERACTION_ACTIONS.resume, t('action.resuming')));
   doc.getElementById('hangupCall')?.addEventListener('click', handleHangupClick);
+  doc.getElementById('openCrmCustomer')?.addEventListener('click', openCurrentCrmCustomer);
+  doc.getElementById('openCrmCase')?.addEventListener('click', openCurrentCrmCase);
+  doc.querySelectorAll('.context-copy').forEach((button) => button.addEventListener('click', async () => {
+    const value = button.dataset.copyValue || '';
+    if (!value) return;
+    const copied = await copyTextToClipboard(value, doc);
+    showCopyFeedback(button, copied);
+  }));
+  doc.querySelectorAll('.context-url-action, .context-link-action').forEach((button) => button.addEventListener('click', () => {
+    const url = button.dataset.contextUrl || '';
+    if (!/^https:\/\//i.test(url)) return;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }));
 
-  doc.getElementById('toggleCallData')?.addEventListener('click', () => {
-    state.callDataOpen = !state.callDataOpen;
-    renderPip();
+  const detailsBackdrop = doc.getElementById('interactionDetailsBackdrop');
+  const openDetails = () => {
+    if (!detailsBackdrop) return;
+    detailsBackdrop.hidden = false;
+    detailsBackdrop.closest('.call-band-body')?.classList.add('interaction-details-open');
+    doc.getElementById('closeInteractionDetails')?.focus();
+  };
+  const closeDetails = () => {
+    if (!detailsBackdrop) return;
+    detailsBackdrop.hidden = true;
+    detailsBackdrop.closest('.call-band-body')?.classList.remove('interaction-details-open');
+    doc.getElementById('openInteractionDetails')?.focus();
+  };
+  doc.getElementById('openInteractionDetails')?.addEventListener('click', openDetails);
+  doc.getElementById('closeInteractionDetails')?.addEventListener('click', closeDetails);
+  detailsBackdrop?.addEventListener('click', (event) => {
+    if (event.target === detailsBackdrop) closeDetails();
   });
 
   doc.getElementById('goBackOnQueue')?.addEventListener('click', makeEligibleForInteractions);
@@ -488,6 +608,86 @@ function bindPipEvents() {
 
   doc.getElementById('retryWrapupCodes')?.addEventListener('click', loadWrapupCodes);
   doc.getElementById('submitWrapup')?.addEventListener('click', submitWrapup);
+}
+
+function selectInteraction(interactionId, shouldRender = true) {
+  const interaction = state.interactions.get(interactionId);
+  if (!interaction) return;
+
+  state.selectedInteractionId = interactionId;
+  state.interaction = interaction;
+  state.callDataOpen = false;
+
+  // Wrap-up UI is conversation-specific. Reload it when the selected conversation changes.
+  if (state.wrapup.loadedForInteractionId !== interactionId) {
+    resetWrapup();
+    if (interaction.agentParticipantId) {
+      loadWrapupCodes();
+      return;
+    }
+  }
+
+  if (shouldRender) renderPip();
+}
+
+async function copyTextToClipboard(value, pipDocument) {
+  // Document PiP can be denied direct Clipboard API access. Prefer the host
+  // extension window, then fall back to execCommand in both documents.
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return true;
+    }
+  } catch { /* Continue with a synchronous fallback. */ }
+
+  const copyWithDocument = (targetDocument) => {
+    if (!targetDocument?.body || typeof targetDocument.execCommand !== 'function') return false;
+    const textarea = targetDocument.createElement('textarea');
+    textarea.value = value;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    textarea.style.pointerEvents = 'none';
+    targetDocument.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    let success = false;
+    try { success = targetDocument.execCommand('copy'); } catch { success = false; }
+    textarea.remove();
+    return success;
+  };
+
+  return copyWithDocument(document) || copyWithDocument(pipDocument);
+}
+
+function showCopyFeedback(button, success) {
+  const icon = button.querySelector('.context-button-icon');
+  const feedback = button.querySelector('.context-button-feedback');
+  if (!icon || !feedback) return;
+  const original = icon.innerHTML;
+  button.classList.remove('is-copied', 'is-copy-error');
+  button.classList.add(success ? 'is-copied' : 'is-copy-error');
+  icon.innerHTML = success ? Icons.check : '×';
+  feedback.textContent = '';
+  window.setTimeout(() => {
+    if (!button.isConnected) return;
+    icon.innerHTML = original;
+    button.classList.remove('is-copied', 'is-copy-error');
+  }, 1000);
+}
+
+async function openCurrentCrmCustomer() {
+  const context = getDemoCrmContext(state.interaction?.participantData || []);
+  if (!context) return;
+  openDemoCrmCustomer(context.customerId);
+  await focusOriginalTab();
+}
+
+async function openCurrentCrmCase() {
+  const context = getDemoCrmContext(state.interaction?.participantData || []);
+  if (!context?.caseId) return;
+  openDemoCrmCase(context.customerId, context.caseId);
+  await focusOriginalTab();
 }
 
 /**
@@ -528,8 +728,12 @@ function toggleQueueState() {
     return;
   }
 
+  goOnQueue();
+}
+
+function goOnQueue() {
   const onQueue = state.presence.queue.onQueue;
-  if (!onQueue?.id) return;
+  if (!onQueue?.id) return false;
 
   const currentPresence = findPresenceById(state.agentStatus.id, state.presence.grouped, state.presence.queue);
   if (currentPresence && !isQueuePresence(currentPresence)) {
@@ -547,6 +751,7 @@ function toggleQueueState() {
   state.presence.expandedPrimary = '';
   integrationAdapter.updatePresence(onQueue.id);
   renderPip();
+  return true;
 }
 
 function goOffQueue() {
@@ -665,11 +870,13 @@ function finalizeOptimisticInteractionAction(action, interactionId) {
 
   if (action === 'pickup' || action === 'resume') state.interaction = { ...state.interaction, phase: 'connected', state: 'connected' };
   if (action === 'hold') state.interaction = { ...state.interaction, phase: 'held', state: 'held' };
+  if (state.interaction?.id === interactionId) state.interactions.set(interactionId, state.interaction);
   if (action === 'disconnect') {
     // L'appel est coupe. Si un code reste a saisir, la carte reste affichee en
     // wrap-up: l'agent qualifie apres coup, sans que le raccrochage attende.
     if (isWrapupPending(state.interaction)) {
       state.interaction = { ...state.interaction, phase: 'wrapup', state: 'wrapup' };
+      state.interactions.set(interactionId, state.interaction);
 
       if (state.wrapup.sendAfterDisconnect) {
         state.wrapup.sendAfterDisconnect = false;
@@ -678,7 +885,10 @@ function finalizeOptimisticInteractionAction(action, interactionId) {
       }
     } else {
       markInteractionEnded(interactionId);
-      state.interaction = null;
+      state.interactions.delete(interactionId);
+      const fallback = [...state.interactions.values()][0] || null;
+      state.selectedInteractionId = fallback?.id || null;
+      state.interaction = fallback;
       resetWrapup();
     }
   }
@@ -693,7 +903,8 @@ function handleHangupClick() {
   if (!state.interaction) return;
 
   state.wrapup.sendAfterDisconnect = Boolean(state.wrapup.selectedCodeId && isWrapupPending(state.interaction));
-  startInteractionAction(INTERACTION_ACTIONS.disconnect, t('action.hangingUp'));
+  const isDigital = state.interaction.mediaType === 'message' || state.interaction.mediaType === 'email';
+  startInteractionAction(INTERACTION_ACTIONS.disconnect, t(isDigital ? 'action.endingConversation' : 'action.hangingUp'));
 }
 
 function loadWrapupCodes() {
@@ -757,14 +968,31 @@ function submitWrapup() {
   }, TIMERS.wrapupPendingMs);
 }
 
-// Code accepte: l'appel etait deja coupe, il ne reste donc plus rien a afficher.
+// Code accepte: l'interaction etait deja terminee cote media. Remove it from
+// the multi-interaction store as well as from the selected interaction. Keeping
+// it in the Map made completed conversations reappear as tabs after ACW.
 function finalizeWrapupSuccess() {
-  if (state.interaction) {
-    markInteractionEnded(state.interaction.id);
-    state.interaction = null;
+  const completedId = state.interaction?.id || state.selectedInteractionId;
+
+  if (completedId) {
+    markInteractionEnded(completedId);
+    state.interactions.delete(completedId);
+    if (state.interactionAction?.id === completedId) clearInteractionAction();
   }
 
+  const fallback = [...state.interactions.values()][0] || null;
+  state.selectedInteractionId = fallback?.id || null;
+  state.interaction = fallback;
+
   resetWrapup();
+
+  // If another interaction remains, load its own ACW context instead of
+  // leaving the global wrap-up state attached to the completed conversation.
+  if (fallback?.id && fallback.agentParticipantId) {
+    loadWrapupCodes();
+    return;
+  }
+
   renderPip();
 }
 

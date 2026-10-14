@@ -47,7 +47,18 @@ export function normalizeHighlightRules(rules) {
       participantDataName: String(rule.participantDataName || '').trim(),
       value: String(rule.value || ''),
       color,
-      enabled: Boolean(rule.enabled)
+      highlightActionEnabled: rule.highlightActionEnabled !== false,
+      enabled: Boolean(rule.enabled),
+      badgeEnabled: Boolean(rule.badgeEnabled ?? rule.badge),
+      badge: String(rule.badge || "").trim(),
+      displayEnabled: Boolean(rule.displayEnabled ?? rule.displayField),
+      displayField: String(rule.displayField || "").trim(),
+      displayLabel: String(rule.displayLabel || "").trim(),
+      allowCopy: Boolean(rule.allowCopy),
+      actionEnabled: Boolean(rule.actionEnabled ?? rule.actionUrl),
+      actionLabel: String(rule.actionLabel || "").trim(),
+      actionUrl: String(rule.actionUrl || "").trim(),
+      actionMode: rule.actionMode === "attached" ? "attached" : "quick"
     };
   });
 }

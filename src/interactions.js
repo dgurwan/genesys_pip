@@ -38,17 +38,14 @@ export function extractEndedInteractionId(message, userId, currentInteraction = 
     const id = conversation?.id || conversation?.conversationId;
     if (!id) return null;
 
-    // Le terminal event peut etre partiel et ne plus porter wrapupRequired.
-    // Si l'etat courant de PiP sait deja que l'ACW est obligatoire, ne jamais
-    // supprimer l'interaction avant la saisie du code.
-    if (currentInteraction?.id === id && isWrapupPending(currentInteraction)) return null;
-
     const agentParticipant = findAgentParticipant(conversation, userId);
+    const serverWrapupSubmitted = Boolean(agentParticipant?.wrapup?.code || agentParticipant?.wrapupCode);
 
-    // Le canal d'appel peut etre raccroche alors que l'agent est encore en ACW.
-    // Dans ce cas on garde l'interaction affichee pour pouvoir saisir le code
-    // wrap-up, au lieu de considerer la conversation comme terminee.
-    if (isWrapupPending(agentParticipant)) return null;
+    // Queue configuration can tell PiP early that ACW will be mandatory, but it
+    // must not override a later authoritative server event showing that wrap-up
+    // has already been completed. This was the main cause of ghost interactions.
+    // A terminal media event is authoritative even when ACW is still pending.
+    // The caller (app.js) decides whether to keep the card in wrap-up or remove it.
 
     // On se base en priorite sur le leg de l'agent: le client peut rester
     // connecte (requeue, transfert) alors que l'agent a quitte la conversation.
@@ -79,11 +76,15 @@ export function extractEndedInteractionId(message, userId, currentInteraction = 
   const state = normalizeKey(interaction.state || interaction.callState || interaction.status || '');
   const category = normalizeKey(payload.category || '');
 
-  if (currentInteraction?.id === id && isWrapupPending(currentInteraction)) return null;
+  const embeddedWrapupSubmitted = Boolean(
+    interaction.wrapup?.code || interaction.wrapupCode || interaction.wrapUp?.code ||
+    payload.wrapup?.code || payload.wrapupCode || payload.wrapUp?.code
+  );
 
-  // Meme garde que pour les notifications de conversation: un raccrochage avec
-  // un wrap-up encore a saisir n'est pas une fin d'interaction.
-  if (isWrapupRequiredValue(interaction, payload) && !interaction.wrapup && !interaction.wrapUp) return null;
+  // A completed wrap-up from EF is authoritative. Only preserve the interaction
+  // for ACW when no completion is present in the terminal event.
+  // A terminal EF event must reach app.js. If wrap-up is pending, app.js keeps
+  // the conversation in ACW instead of leaving it incorrectly CONNECTED.
 
   // Pour les notifications EF (screenPop / interactionSubscription), ne pas
   // inferer une fin a partir d'un payload incomplet. Seul un etat explicitement
@@ -100,6 +101,10 @@ export function mergeInteraction(previous, next, actionInProgress) {
     return applyPendingActionToInteraction(next, actionInProgress);
   }
 
+  const mergedMediaType = previous.mediaType && previous.mediaType !== 'voice' && next.mediaType === 'voice' && !next.mediaTypeExplicit
+    ? previous.mediaType
+    : (next.mediaType || previous.mediaType || 'voice');
+
   const merged = {
     ...previous,
     ...next,
@@ -113,7 +118,14 @@ export function mergeInteraction(previous, next, actionInProgress) {
     agentParticipantId: next.agentParticipantId || previous.agentParticipantId,
     customerParticipantId: next.customerParticipantId || previous.customerParticipantId,
     wrapupRequired: next.wrapupRequired || previous.wrapupRequired,
-    wrapupSubmitted: next.wrapupSubmitted || previous.wrapupSubmitted
+    wrapupSubmitted: next.wrapupSubmitted || previous.wrapupSubmitted,
+    // Embedded Framework events can omit mediaType. Never let that implicit
+    // voice fallback overwrite a media type already established by the
+    // Genesys conversation notification.
+    mediaType: mergedMediaType,
+    // Generic labels such as "Voice" are transport fallbacks, not customer
+    // identities. Never let one leak into a digital interaction after merge.
+    caller: resolveInteractionDisplayName(next.caller, previous.caller, mergedMediaType)
   };
 
   // Une notification WebSocket incomplete ne doit jamais degrader un etat
@@ -147,7 +159,7 @@ function extractFromEmbeddedInteraction(message) {
   // Raccroche mais code wrap-up encore attendu: c'est de l'ACW, pas une fin.
   if (phase === 'ended' && isWrapupRequiredValue(interaction, payload) && !interaction.wrapup && !interaction.wrapUp) phase = 'wrapup';
   if (phase === 'ended') return null;
-  if (!isVoiceInteraction(interaction, message.type)) return null;
+  const mediaType = detectEmbeddedMediaType(interaction, payload);
 
   const participantData = extractCustomerParticipantData({ interaction, payload, conversation: null });
 
@@ -155,7 +167,7 @@ function extractFromEmbeddedInteraction(message) {
     id,
     phase,
     state: rawState || category || phase,
-    caller: interaction.remoteName || interaction.name || interaction.ani || interaction.phone || interaction.phoneNumber || payload.searchString || 'Interaction voix',
+    caller: resolveInteractionDisplayName(interaction.remoteName || interaction.name || interaction.ani || interaction.phone || interaction.phoneNumber || payload.searchString, null, mediaType),
     startTime: parseTimestamp(interaction.connectedTime || interaction.startTime),
     queueId: interaction.queueId || interaction.queue?.id || payload.queueId || payload.queue?.id || null,
     queueName: interaction.queueName || interaction.queue?.name || interaction.queue?.label || payload.queueName || payload.queue?.name || '',
@@ -163,7 +175,9 @@ function extractFromEmbeddedInteraction(message) {
     agentParticipantId: interaction.participantId || interaction.agentParticipantId || null,
     customerParticipantId: null,
     wrapupRequired: isWrapupRequiredValue(interaction, message.data || {}),
-    wrapupSubmitted: Boolean(interaction.wrapup)
+    wrapupSubmitted: Boolean(interaction.wrapup),
+    mediaType,
+    mediaTypeExplicit: hasExplicitEmbeddedMediaType(interaction, payload)
   };
 }
 
@@ -176,16 +190,19 @@ function extractFromConversationNotification(message, userId) {
 
   const agentParticipant = findAgentParticipant(conversation, userId);
   const customerParticipant = findCustomerParticipant(conversation);
-  const agentCommunication = findBestCommunication(agentParticipant);
-  const customerCommunication = findBestCommunication(customerParticipant);
+  const agentSelection = findBestCommunicationWithMedia(agentParticipant);
+  const customerSelection = findBestCommunicationWithMedia(customerParticipant);
+  const agentCommunication = agentSelection?.communication || null;
+  const customerCommunication = customerSelection?.communication || null;
   const phase = getPhaseFromAgentParticipant(agentParticipant, agentCommunication);
   const participantData = extractCustomerParticipantData({ interaction: null, payload: {}, conversation });
+  const mediaType = agentSelection?.mediaType || customerSelection?.mediaType || detectConversationMediaType(agentParticipant, agentCommunication);
 
   return {
     id,
     phase,
     state: agentCommunication?.state || phase,
-    caller: customerParticipant?.name || customerParticipant?.ani || customerCommunication?.ani || customerCommunication?.address || conversation.ani || 'Interaction voix',
+    caller: resolveInteractionDisplayName(customerParticipant?.name || customerParticipant?.ani || customerCommunication?.ani || customerCommunication?.address || conversation.ani, null, mediaType),
     startTime: findInteractionStartTime(conversation, agentParticipant, agentCommunication),
     queueId: findQueueId(conversation, agentParticipant, customerParticipant),
     queueName: findQueueName(conversation, agentParticipant, customerParticipant),
@@ -193,8 +210,89 @@ function extractFromConversationNotification(message, userId) {
     agentParticipantId: agentParticipant?.id || agentParticipant?.participantId || null,
     customerParticipantId: customerParticipant?.id || customerParticipant?.participantId || null,
     wrapupRequired: isWrapupRequiredValue(agentParticipant),
-    wrapupSubmitted: Boolean(agentParticipant?.wrapup?.code || agentParticipant?.wrapupCode)
+    wrapupSubmitted: Boolean(agentParticipant?.wrapup?.code || agentParticipant?.wrapupCode),
+    mediaType,
+    mediaTypeExplicit: true
   };
+}
+
+
+function hasExplicitEmbeddedMediaType(interaction, payload) {
+  if (interaction?.isMessage === true || interaction?.isChat === true || interaction?.isEmail === true || interaction?.isCallback === true || interaction?.isVoicemail === true) return true;
+  return Boolean(interaction?.mediaType || interaction?.type || interaction?.communicationType || interaction?.channel ||
+    payload?.mediaType || payload?.type || payload?.communicationType || payload?.channel);
+}
+
+function detectEmbeddedMediaType(interaction, payload) {
+  // The Embeddable Framework interaction object exposes explicit boolean media
+  // flags (isMessage/isChat/isEmail/isCallback). These are more reliable than
+  // generic type/category fields and must be checked first.
+  if (interaction?.isMessage === true || interaction?.isChat === true) return 'message';
+  if (interaction?.isEmail === true) return 'email';
+  if (interaction?.isCallback === true) return 'callback';
+  if (interaction?.isVoicemail === true) return 'voice';
+
+  const explicit = interaction?.mediaType || interaction?.type || interaction?.communicationType || interaction?.channel ||
+    payload?.mediaType || payload?.communicationType || payload?.channel;
+  if (explicit) return normalizeMediaType(explicit);
+
+  // EF digital events commonly expose the media through category/provider
+  // rather than mediaType. Use these hints before falling back to voice.
+  const hints = [interaction?.provider, interaction?.subType, interaction?.direction, payload?.category, payload?.provider]
+    .filter(Boolean).join(' ');
+  const normalized = normalizeKey(hints);
+  if (normalized.includes('message') || normalized.includes('chat') || normalized.includes('sms') || normalized.includes('social')) return 'message';
+  if (normalized.includes('email')) return 'email';
+  if (normalized.includes('callback')) return 'callback';
+  return 'voice';
+}
+
+function resolveInteractionDisplayName(primary, previous, mediaType) {
+  const candidates = [primary, previous]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+
+  for (const candidate of candidates) {
+    const key = normalizeKey(candidate);
+    // These values are generic media fallbacks. They are valid only when they
+    // describe the current media; otherwise they are stale data from another
+    // event/source and must not become the visible interaction name.
+    const generic = ['voice', 'call', 'messaging', 'message', 'chat', 'email', 'callback'];
+    if (!generic.includes(key)) return candidate;
+    if (mediaType === 'voice' && (key === 'voice' || key === 'call')) return 'Voice';
+    if (mediaType === 'message' && (key === 'messaging' || key === 'message' || key === 'chat')) return 'Messaging';
+    if (mediaType === 'email' && key === 'email') return 'Email';
+    if (mediaType === 'callback' && key === 'callback') return 'Callback';
+  }
+
+  return defaultInteractionLabel(mediaType);
+}
+
+function defaultInteractionLabel(mediaType) {
+  if (mediaType === 'message') return 'Messaging';
+  if (mediaType === 'email') return 'Email';
+  if (mediaType === 'callback') return 'Callback';
+  return 'Voice';
+}
+
+function normalizeMediaType(value) {
+  const key = normalizeKey(value);
+  if (key.includes('message') || key.includes('chat') || key.includes('sms') || key.includes('social')) return 'message';
+  if (key.includes('callback')) return 'callback';
+  if (key.includes('email')) return 'email';
+  return 'voice';
+}
+
+function detectConversationMediaType(agentParticipant, communication) {
+  const explicit = communication?.mediaType || communication?.type || communication?.communicationType || communication?.channel;
+  if (explicit) return normalizeMediaType(explicit);
+  if (Array.isArray(agentParticipant?.callbacks) && agentParticipant.callbacks.includes(communication)) return 'callback';
+  if (Array.isArray(agentParticipant?.calls) && agentParticipant.calls.includes(communication)) return 'voice';
+  if (Array.isArray(agentParticipant?.sessions) && agentParticipant.sessions.includes(communication)) return 'message';
+  if (Array.isArray(agentParticipant?.messages) && agentParticipant.messages.includes(communication)) return 'message';
+  if (Array.isArray(agentParticipant?.chats) && agentParticipant.chats.includes(communication)) return 'message';
+  if (Array.isArray(agentParticipant?.emails) && agentParticipant.emails.includes(communication)) return 'email';
+  return 'voice';
 }
 
 function getPhaseFromState(rawState, category, interaction) {
@@ -307,6 +405,24 @@ function findAgentParticipant(conversation, userId) {
   return pool[pool.length - 1];
 }
 
+
+function findBestCommunicationWithMedia(participant) {
+  if (!participant) return null;
+  const groups = [
+    ['message', participant.messages],
+    ['message', participant.chats],
+    ['message', participant.sessions],
+    ['email', participant.emails],
+    ['callback', participant.callbacks],
+    ['voice', participant.calls]
+  ];
+  const tagged = groups.flatMap(([mediaType, list]) =>
+    Array.isArray(list) ? list.map((communication) => ({ communication, mediaType })) : []
+  );
+  return tagged.find((item) => isActiveCommunication(item.communication)) ||
+    tagged.find((item) => item.communication?.state) || tagged[0] || null;
+}
+
 function findBestCommunication(participant) {
   const candidates = getParticipantCommunications(participant);
   return candidates.find(isActiveCommunication) || candidates.find((item) => item.state) || candidates[0] || null;
@@ -317,6 +433,9 @@ function getParticipantCommunications(participant) {
   return [
     ...(Array.isArray(participant.calls) ? participant.calls : []),
     ...(Array.isArray(participant.sessions) ? participant.sessions : []),
+    ...(Array.isArray(participant.messages) ? participant.messages : []),
+    ...(Array.isArray(participant.chats) ? participant.chats : []),
+    ...(Array.isArray(participant.emails) ? participant.emails : []),
     ...(Array.isArray(participant.callbacks) ? participant.callbacks : [])
   ];
 }

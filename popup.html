@@ -47,75 +47,142 @@
         placeholder="ex: customer|prefix1_|crm."></textarea>
       <p class="hint" data-i18n="popup.filterHint">Un ou plusieurs prefixes separes par |. Laisser vide pour tout afficher.</p>
 
-      <div class="popup-section-title highlight-section-title" data-i18n="popup.highlight.title">Participant Data highlighting</div>
-      <p class="hint" data-i18n="popup.highlight.hint">Change the PiP background when a Participant Data name and value match exactly. Independent from the display filter. First match wins.</p>
+      <div class="popup-section-title highlight-section-title" data-i18n="popup.highlight.title">Context Rules</div>
+      <p class="hint" data-i18n="popup.highlight.hint">Match Participant Data and choose what the PiP should show or do. Rules are evaluated in priority order.</p>
 
       <div class="highlight-rules">
-        <div class="highlight-rule" data-highlight-rule="1">
-          <div class="highlight-rule-head">
-            <span class="highlight-rule-drag-handle" draggable="true" tabindex="0" role="button" aria-label="Reorder rule" title="Drag to reorder">☰</span>
-            <button type="button" class="highlight-rule-toggle" data-highlight-toggle="1" aria-expanded="false">
-              <span class="highlight-rule-chevron" aria-hidden="true">›</span>
-              <strong data-i18n="popup.highlight.rule1">Rule 1</strong>
-            </button>
-            <label class="switch" data-i18n-title="popup.highlight.enable">
-              <input id="highlightEnabled1" type="checkbox">
-              <span class="slider"></span>
-            </label>
-          </div>
-          <div class="highlight-rule-body" data-highlight-body="1" hidden>
-            <label class="popup-label" for="highlightName1" data-i18n="popup.highlight.name">Participant Data name</label>
-            <input id="highlightName1" class="popup-input" type="text" placeholder="e.g. customerType">
-            <label class="popup-label" for="highlightValue1" data-i18n="popup.highlight.value">Exact value</label>
-            <input id="highlightValue1" class="popup-input" type="text" placeholder="e.g. VIP">
-            <label class="popup-label" for="highlightColor1" data-i18n="popup.highlight.color">Background color</label>
-            <div class="color-row"><input id="highlightColor1" class="popup-color" type="color" value="#E8F4FF"><span id="highlightColorHex1" class="color-hex">#E8F4FF</span></div>
-          </div>
+      <div class="highlight-rule" data-highlight-rule="1">
+        <div class="highlight-rule-head">
+          <span class="highlight-rule-drag-handle" draggable="true" tabindex="0" role="button" aria-label="Reorder rule" title="Drag to reorder">☰</span>
+          <button type="button" class="highlight-rule-toggle" data-highlight-toggle="1" aria-expanded="false">
+            <span class="rule-head-copy"><strong data-i18n="popup.highlight.rule1">Rule 1</strong><small class="rule-condition-summary" data-rule-condition-summary="1" data-i18n="rules.notConfigured">Not configured</small></span>
+            <span class="rule-action-summary" data-rule-action-summary="1"></span>
+            <span class="highlight-rule-chevron" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="m5.5 7.5 4.5 4.5 4.5-4.5"/></svg></span>
+          </button>
+          <label class="switch" data-i18n-title="popup.highlight.enable"><input id="highlightEnabled1" type="checkbox"><span class="slider"></span></label>
         </div>
-
-        <div class="highlight-rule" data-highlight-rule="2">
-          <div class="highlight-rule-head">
-            <span class="highlight-rule-drag-handle" draggable="true" tabindex="0" role="button" aria-label="Reorder rule" title="Drag to reorder">☰</span>
-            <button type="button" class="highlight-rule-toggle" data-highlight-toggle="2" aria-expanded="false">
-              <span class="highlight-rule-chevron" aria-hidden="true">›</span>
-              <strong data-i18n="popup.highlight.rule2">Rule 2</strong>
-            </button>
-            <label class="switch" data-i18n-title="popup.highlight.enable">
-              <input id="highlightEnabled2" type="checkbox">
-              <span class="slider"></span>
-            </label>
+        <div class="highlight-rule-body" data-highlight-body="1" hidden>
+          <div class="rule-builder-section">
+            <div class="rule-builder-title"><span class="rule-builder-kicker" data-i18n="rules.when">WHEN</span><strong data-i18n="rules.matches">Participant Data matches</strong></div>
+            <div class="rule-condition-grid">
+              <div><label class="popup-label" for="highlightName1" data-i18n="rules.participantData">Participant Data</label><input id="highlightName1" class="popup-input" type="text" placeholder="e.g. customerType"></div>
+              <div><label class="popup-label" for="highlightValue1" data-i18n="rules.equals">Equals</label><input id="highlightValue1" class="popup-input" type="text" placeholder="e.g. VIP"></div>
+            </div>
           </div>
-          <div class="highlight-rule-body" data-highlight-body="2" hidden>
-            <label class="popup-label" for="highlightName2" data-i18n="popup.highlight.name">Participant Data name</label>
-            <input id="highlightName2" class="popup-input" type="text" placeholder="e.g. priority">
-            <label class="popup-label" for="highlightValue2" data-i18n="popup.highlight.value">Exact value</label>
-            <input id="highlightValue2" class="popup-input" type="text" placeholder="e.g. URGENT">
-            <label class="popup-label" for="highlightColor2" data-i18n="popup.highlight.color">Background color</label>
-            <div class="color-row"><input id="highlightColor2" class="popup-color" type="color" value="#FFF1D6"><span id="highlightColorHex2" class="color-hex">#FFF1D6</span></div>
+          <div class="rule-builder-section actions-builder">
+            <div class="rule-builder-title"><span class="rule-builder-kicker" data-i18n="rules.then">THEN</span><strong data-i18n="rules.actions">Actions</strong></div>
+            <p class="rule-builder-help" data-i18n="rules.actionsHelp">Choose what the PiP should show when this rule matches.</p>
+            <div class="rule-action-card action-highlight">
+              <div class="rule-action-icon">🎨</div><div class="rule-action-main"><strong data-i18n="rules.highlight">Highlight conversation</strong><small data-i18n="rules.highlightHelp">Use a background color as an immediate business signal.</small><label class="context-check modern-check"><input id="contextHighlightEnabled1" type="checkbox" checked><span data-i18n="rules.enableHighlight">Enable highlight</span></label></div>
+              <div class="color-row compact"><input id="highlightColor1" class="popup-color" type="color" value="#E8F4FF"><span id="highlightColorHex1" class="color-hex">#E8F4FF</span></div>
+            </div>
+            <div class="rule-action-card">
+              <div class="rule-action-icon">🏷</div><div class="rule-action-main"><strong data-i18n="rules.badge">Show badge</strong><small data-i18n="rules.badgeHelp">Display a short label such as VIP or Billing.</small><label class="context-check modern-check action-toggle"><input id="contextBadgeEnabled1" type="checkbox"><span data-i18n="rules.enableBadge">Enable badge</span></label><input id="contextBadge1" class="popup-input" type="text" placeholder="e.g. VIP"></div>
+            </div>
+            <div class="rule-action-card">
+              <div class="rule-action-icon text-icon">Aa</div><div class="rule-action-main"><strong data-i18n="rules.showData">Show data</strong><small data-i18n="rules.showDataHelp">Expose one Participant Data value in the conversation.</small><label class="context-check modern-check action-toggle"><input id="contextDisplayEnabled1" type="checkbox"><span data-i18n="rules.enableData">Enable data display</span></label>
+                <div class="rule-two-columns labeled-fields"><div><label class="popup-label" for="contextDisplayField1">Participant Data</label><input id="contextDisplayField1" class="popup-input" type="text" placeholder="e.g. CustomerId"></div><div><label class="popup-label" for="contextDisplayLabel1" data-i18n="rules.displayLabel">Display label</label><input id="contextDisplayLabel1" class="popup-input" type="text" placeholder="e.g. Customer"></div></div>
+                <label class="context-check modern-check"><input id="contextAllowCopy1" type="checkbox"><span data-i18n="rules.allowCopy">Allow one-click copy</span></label>
+              </div>
+            </div>
+            <div class="rule-action-card">
+              <div class="rule-action-icon">↗</div><div class="rule-action-main"><strong data-i18n="rules.openLink">Open link</strong><small data-i18n="rules.openLinkHelp">Open a contextual HTTPS link. It can be a standalone quick action or attached to displayed data.</small>
+                <label class="context-check modern-check action-toggle"><input id="contextActionEnabled1" type="checkbox"><span data-i18n="rules.enableOpen">Enable open action</span></label>
+                <div id="contextActionFields1" class="context-action-fields"><label class="popup-label" for="contextActionLabel1" data-i18n="rules.actionLabel">Action label</label><input id="contextActionLabel1" class="popup-input" type="text" placeholder="e.g. Open CRM"><label class="popup-label" for="contextActionUrl1" data-i18n="rules.httpsUrl">HTTPS URL</label><input id="contextActionUrl1" class="popup-input" type="text" placeholder="https://crm.example/customer/{{CustomerId}}"><fieldset class="action-mode"><legend data-i18n="rules.display">Display</legend><label><input type="radio" name="contextActionMode1" value="quick" checked><span data-i18n="rules.quickAction">Quick action</span><small data-i18n="rules.quickActionHelp">Show a compact action button.</small></label><label><input type="radio" name="contextActionMode1" value="attached"><span data-i18n="rules.attachData">Attach to displayed data</span><small data-i18n="rules.attachDataHelp">Add the open icon to the Show data row.</small></label></fieldset></div>
+              </div>
+            </div>
           </div>
+          <div class="rule-preview" data-rule-preview="1"><div class="rule-preview-title" data-i18n="rules.preview">PREVIEW</div><div class="rule-preview-card" data-rule-preview-card="1"><span class="rule-preview-empty" data-i18n="rules.previewEmpty">Configure actions to preview the result.</span></div></div>
         </div>
-
-        <div class="highlight-rule" data-highlight-rule="3">
-          <div class="highlight-rule-head">
-            <span class="highlight-rule-drag-handle" draggable="true" tabindex="0" role="button" aria-label="Reorder rule" title="Drag to reorder">☰</span>
-            <button type="button" class="highlight-rule-toggle" data-highlight-toggle="3" aria-expanded="false">
-              <span class="highlight-rule-chevron" aria-hidden="true">›</span>
-              <strong data-i18n="popup.highlight.rule3">Rule 3</strong>
-            </button>
-            <label class="switch" data-i18n-title="popup.highlight.enable">
-              <input id="highlightEnabled3" type="checkbox">
-              <span class="slider"></span>
-            </label>
-          </div>
-          <div class="highlight-rule-body" data-highlight-body="3" hidden>
-            <label class="popup-label" for="highlightName3" data-i18n="popup.highlight.name">Participant Data name</label>
-            <input id="highlightName3" class="popup-input" type="text" placeholder="e.g. segment">
-            <label class="popup-label" for="highlightValue3" data-i18n="popup.highlight.value">Exact value</label>
-            <input id="highlightValue3" class="popup-input" type="text" placeholder="e.g. PREMIUM">
-            <label class="popup-label" for="highlightColor3" data-i18n="popup.highlight.color">Background color</label>
-            <div class="color-row"><input id="highlightColor3" class="popup-color" type="color" value="#FFE3E3"><span id="highlightColorHex3" class="color-hex">#FFE3E3</span></div>
-          </div>
+      </div>
+      <div class="highlight-rule" data-highlight-rule="2">
+        <div class="highlight-rule-head">
+          <span class="highlight-rule-drag-handle" draggable="true" tabindex="0" role="button" aria-label="Reorder rule" title="Drag to reorder">☰</span>
+          <button type="button" class="highlight-rule-toggle" data-highlight-toggle="2" aria-expanded="false">
+            <span class="rule-head-copy"><strong data-i18n="popup.highlight.rule2">Rule 2</strong><small class="rule-condition-summary" data-rule-condition-summary="2" data-i18n="rules.notConfigured">Not configured</small></span>
+            <span class="rule-action-summary" data-rule-action-summary="2"></span>
+            <span class="highlight-rule-chevron" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="m5.5 7.5 4.5 4.5 4.5-4.5"/></svg></span>
+          </button>
+          <label class="switch" data-i18n-title="popup.highlight.enable"><input id="highlightEnabled2" type="checkbox"><span class="slider"></span></label>
         </div>
+        <div class="highlight-rule-body" data-highlight-body="2" hidden>
+          <div class="rule-builder-section">
+            <div class="rule-builder-title"><span class="rule-builder-kicker" data-i18n="rules.when">WHEN</span><strong data-i18n="rules.matches">Participant Data matches</strong></div>
+            <div class="rule-condition-grid">
+              <div><label class="popup-label" for="highlightName2" data-i18n="rules.participantData">Participant Data</label><input id="highlightName2" class="popup-input" type="text" placeholder="e.g. priority"></div>
+              <div><label class="popup-label" for="highlightValue2" data-i18n="rules.equals">Equals</label><input id="highlightValue2" class="popup-input" type="text" placeholder="e.g. URGENT"></div>
+            </div>
+          </div>
+          <div class="rule-builder-section actions-builder">
+            <div class="rule-builder-title"><span class="rule-builder-kicker" data-i18n="rules.then">THEN</span><strong data-i18n="rules.actions">Actions</strong></div>
+            <p class="rule-builder-help" data-i18n="rules.actionsHelp">Choose what the PiP should show when this rule matches.</p>
+            <div class="rule-action-card action-highlight">
+              <div class="rule-action-icon">🎨</div><div class="rule-action-main"><strong data-i18n="rules.highlight">Highlight conversation</strong><small data-i18n="rules.highlightHelp">Use a background color as an immediate business signal.</small><label class="context-check modern-check"><input id="contextHighlightEnabled2" type="checkbox" checked><span data-i18n="rules.enableHighlight">Enable highlight</span></label></div>
+              <div class="color-row compact"><input id="highlightColor2" class="popup-color" type="color" value="#FFF1D6"><span id="highlightColorHex2" class="color-hex">#FFF1D6</span></div>
+            </div>
+            <div class="rule-action-card">
+              <div class="rule-action-icon">🏷</div><div class="rule-action-main"><strong data-i18n="rules.badge">Show badge</strong><small data-i18n="rules.badgeHelp">Display a short label such as VIP or Billing.</small><label class="context-check modern-check action-toggle"><input id="contextBadgeEnabled2" type="checkbox"><span data-i18n="rules.enableBadge">Enable badge</span></label><input id="contextBadge2" class="popup-input" type="text" placeholder="e.g. VIP"></div>
+            </div>
+            <div class="rule-action-card">
+              <div class="rule-action-icon text-icon">Aa</div><div class="rule-action-main"><strong data-i18n="rules.showData">Show data</strong><small data-i18n="rules.showDataHelp">Expose one Participant Data value in the conversation.</small><label class="context-check modern-check action-toggle"><input id="contextDisplayEnabled2" type="checkbox"><span data-i18n="rules.enableData">Enable data display</span></label>
+                <div class="rule-two-columns labeled-fields"><div><label class="popup-label" for="contextDisplayField2">Participant Data</label><input id="contextDisplayField2" class="popup-input" type="text" placeholder="e.g. CustomerId"></div><div><label class="popup-label" for="contextDisplayLabel2" data-i18n="rules.displayLabel">Display label</label><input id="contextDisplayLabel2" class="popup-input" type="text" placeholder="e.g. Customer"></div></div>
+                <label class="context-check modern-check"><input id="contextAllowCopy2" type="checkbox"><span data-i18n="rules.allowCopy">Allow one-click copy</span></label>
+              </div>
+            </div>
+            <div class="rule-action-card">
+              <div class="rule-action-icon">↗</div><div class="rule-action-main"><strong data-i18n="rules.openLink">Open link</strong><small data-i18n="rules.openLinkHelp">Open a contextual HTTPS link. It can be a standalone quick action or attached to displayed data.</small>
+                <label class="context-check modern-check action-toggle"><input id="contextActionEnabled2" type="checkbox"><span data-i18n="rules.enableOpen">Enable open action</span></label>
+                <div id="contextActionFields2" class="context-action-fields"><label class="popup-label" for="contextActionLabel2" data-i18n="rules.actionLabel">Action label</label><input id="contextActionLabel2" class="popup-input" type="text" placeholder="e.g. Open CRM"><label class="popup-label" for="contextActionUrl2" data-i18n="rules.httpsUrl">HTTPS URL</label><input id="contextActionUrl2" class="popup-input" type="text" placeholder="https://crm.example/customer/{{CustomerId}}"><fieldset class="action-mode"><legend data-i18n="rules.display">Display</legend><label><input type="radio" name="contextActionMode2" value="quick" checked><span data-i18n="rules.quickAction">Quick action</span><small data-i18n="rules.quickActionHelp">Show a compact action button.</small></label><label><input type="radio" name="contextActionMode2" value="attached"><span data-i18n="rules.attachData">Attach to displayed data</span><small data-i18n="rules.attachDataHelp">Add the open icon to the Show data row.</small></label></fieldset></div>
+              </div>
+            </div>
+          </div>
+          <div class="rule-preview" data-rule-preview="2"><div class="rule-preview-title" data-i18n="rules.preview">PREVIEW</div><div class="rule-preview-card" data-rule-preview-card="2"><span class="rule-preview-empty" data-i18n="rules.previewEmpty">Configure actions to preview the result.</span></div></div>
+        </div>
+      </div>
+      <div class="highlight-rule" data-highlight-rule="3">
+        <div class="highlight-rule-head">
+          <span class="highlight-rule-drag-handle" draggable="true" tabindex="0" role="button" aria-label="Reorder rule" title="Drag to reorder">☰</span>
+          <button type="button" class="highlight-rule-toggle" data-highlight-toggle="3" aria-expanded="false">
+            <span class="rule-head-copy"><strong data-i18n="popup.highlight.rule3">Rule 3</strong><small class="rule-condition-summary" data-rule-condition-summary="3" data-i18n="rules.notConfigured">Not configured</small></span>
+            <span class="rule-action-summary" data-rule-action-summary="3"></span>
+            <span class="highlight-rule-chevron" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="m5.5 7.5 4.5 4.5 4.5-4.5"/></svg></span>
+          </button>
+          <label class="switch" data-i18n-title="popup.highlight.enable"><input id="highlightEnabled3" type="checkbox"><span class="slider"></span></label>
+        </div>
+        <div class="highlight-rule-body" data-highlight-body="3" hidden>
+          <div class="rule-builder-section">
+            <div class="rule-builder-title"><span class="rule-builder-kicker" data-i18n="rules.when">WHEN</span><strong data-i18n="rules.matches">Participant Data matches</strong></div>
+            <div class="rule-condition-grid">
+              <div><label class="popup-label" for="highlightName3" data-i18n="rules.participantData">Participant Data</label><input id="highlightName3" class="popup-input" type="text" placeholder="e.g. segment"></div>
+              <div><label class="popup-label" for="highlightValue3" data-i18n="rules.equals">Equals</label><input id="highlightValue3" class="popup-input" type="text" placeholder="e.g. PREMIUM"></div>
+            </div>
+          </div>
+          <div class="rule-builder-section actions-builder">
+            <div class="rule-builder-title"><span class="rule-builder-kicker" data-i18n="rules.then">THEN</span><strong data-i18n="rules.actions">Actions</strong></div>
+            <p class="rule-builder-help" data-i18n="rules.actionsHelp">Choose what the PiP should show when this rule matches.</p>
+            <div class="rule-action-card action-highlight">
+              <div class="rule-action-icon">🎨</div><div class="rule-action-main"><strong data-i18n="rules.highlight">Highlight conversation</strong><small data-i18n="rules.highlightHelp">Use a background color as an immediate business signal.</small><label class="context-check modern-check"><input id="contextHighlightEnabled3" type="checkbox" checked><span data-i18n="rules.enableHighlight">Enable highlight</span></label></div>
+              <div class="color-row compact"><input id="highlightColor3" class="popup-color" type="color" value="#FFE3E3"><span id="highlightColorHex3" class="color-hex">#FFE3E3</span></div>
+            </div>
+            <div class="rule-action-card">
+              <div class="rule-action-icon">🏷</div><div class="rule-action-main"><strong data-i18n="rules.badge">Show badge</strong><small data-i18n="rules.badgeHelp">Display a short label such as VIP or Billing.</small><label class="context-check modern-check action-toggle"><input id="contextBadgeEnabled3" type="checkbox"><span data-i18n="rules.enableBadge">Enable badge</span></label><input id="contextBadge3" class="popup-input" type="text" placeholder="e.g. VIP"></div>
+            </div>
+            <div class="rule-action-card">
+              <div class="rule-action-icon text-icon">Aa</div><div class="rule-action-main"><strong data-i18n="rules.showData">Show data</strong><small data-i18n="rules.showDataHelp">Expose one Participant Data value in the conversation.</small><label class="context-check modern-check action-toggle"><input id="contextDisplayEnabled3" type="checkbox"><span data-i18n="rules.enableData">Enable data display</span></label>
+                <div class="rule-two-columns labeled-fields"><div><label class="popup-label" for="contextDisplayField3">Participant Data</label><input id="contextDisplayField3" class="popup-input" type="text" placeholder="e.g. CustomerId"></div><div><label class="popup-label" for="contextDisplayLabel3" data-i18n="rules.displayLabel">Display label</label><input id="contextDisplayLabel3" class="popup-input" type="text" placeholder="e.g. Customer"></div></div>
+                <label class="context-check modern-check"><input id="contextAllowCopy3" type="checkbox"><span data-i18n="rules.allowCopy">Allow one-click copy</span></label>
+              </div>
+            </div>
+            <div class="rule-action-card">
+              <div class="rule-action-icon">↗</div><div class="rule-action-main"><strong data-i18n="rules.openLink">Open link</strong><small data-i18n="rules.openLinkHelp">Open a contextual HTTPS link. It can be a standalone quick action or attached to displayed data.</small>
+                <label class="context-check modern-check action-toggle"><input id="contextActionEnabled3" type="checkbox"><span data-i18n="rules.enableOpen">Enable open action</span></label>
+                <div id="contextActionFields3" class="context-action-fields"><label class="popup-label" for="contextActionLabel3" data-i18n="rules.actionLabel">Action label</label><input id="contextActionLabel3" class="popup-input" type="text" placeholder="e.g. Open CRM"><label class="popup-label" for="contextActionUrl3" data-i18n="rules.httpsUrl">HTTPS URL</label><input id="contextActionUrl3" class="popup-input" type="text" placeholder="https://crm.example/customer/{{CustomerId}}"><fieldset class="action-mode"><legend data-i18n="rules.display">Display</legend><label><input type="radio" name="contextActionMode3" value="quick" checked><span data-i18n="rules.quickAction">Quick action</span><small data-i18n="rules.quickActionHelp">Show a compact action button.</small></label><label><input type="radio" name="contextActionMode3" value="attached"><span data-i18n="rules.attachData">Attach to displayed data</span><small data-i18n="rules.attachDataHelp">Add the open icon to the Show data row.</small></label></fieldset></div>
+              </div>
+            </div>
+          </div>
+          <div class="rule-preview" data-rule-preview="3"><div class="rule-preview-title" data-i18n="rules.preview">PREVIEW</div><div class="rule-preview-card" data-rule-preview-card="3"><span class="rule-preview-empty" data-i18n="rules.previewEmpty">Configure actions to preview the result.</span></div></div>
+        </div>
+      </div>
       </div>
     </section>
 
